@@ -49,7 +49,7 @@ try {
             'INVESTIGATION.md' = Join-Path $PSScriptRoot 'INVESTIGATION.md'
             'WorkshopCreate.xml' = Join-Path $PSScriptRoot 'WorkshopCreate.xml'
             'WORKSHOP.md' = Join-Path $PSScriptRoot 'WORKSHOP.md'
-            'docs/cover.png' = Join-Path $PSScriptRoot 'docs\cover.png'
+            'docs/cover.jpg' = Join-Path $PSScriptRoot 'docs\cover.jpg'
         }
         foreach ($entry in $entries.Keys) {
             [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(

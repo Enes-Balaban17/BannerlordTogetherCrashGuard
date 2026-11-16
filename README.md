@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/cover.png" alt="Bannerlord Together Crash Guard" width="900">
+  <img src="docs/cover.jpg" alt="Bannerlord Together Crash Guard" width="900">
 </p>
 
 <h1 align="center">Bannerlord Together Crash Guard</h1>
