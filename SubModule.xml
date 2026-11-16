@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Bannerlord Together Crash Guard"/>
+  <Id value="BannerlordTogetherCrashGuard"/>
+  <Version value="v0.2.3"/>
+  <DefaultModule value="false"/>
+  <ModuleCategory value="Singleplayer"/>
+  <ModuleType value="Community"/>
+  <SingleplayerModule value="true"/>
+  <MultiplayerModule value="false"/>
+  <DependedModules>
+    <DependedModule Id="Bannerlord.Harmony" DependentVersion="v2.4.2.248"/>
+    <DependedModule Id="Sandbox" DependentVersion="v1.4.8"/>
+    <DependedModule Id="BannerlordTogether" DependentVersion="v0.5.0.1"/>
+  </DependedModules>
+  <SubModules>
+    <SubModule>
+      <Name value="Bannerlord Together Crash Guard"/>
+      <DLLName value="BannerlordTogetherCrashGuard.dll"/>
+      <SubModuleClassType value="BannerlordTogetherCrashGuard.SubModule"/>
+      <Assemblies/>
+    </SubModule>
+  </SubModules>
+</Module>

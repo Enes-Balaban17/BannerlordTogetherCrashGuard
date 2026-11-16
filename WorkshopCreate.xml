@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Tasks>
+  <CreateItem/>
+  <UpdateItem>
+    <ModuleFolder Value="D:\SteamLibrary\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\BannerlordTogetherCrashGuard"/>
+    <ItemDescription Value="Fixes the Extortion by Deserters village battle for Bannerlord Together v0.5.0.1 on Bannerlord v1.4.8.119303. Guards the co-op host against managed deployment exceptions and logs empty battles or missing player agents. Requires Harmony and Bannerlord Together. Load below BannerlordTogether and disable the separate BLT Deployment Crash Guard."/>
+    <Tags>
+      <Tag Value="Utility"/>
+      <Tag Value="Singleplayer"/>
+      <Tag Value="v1.4.8"/>
+    </Tags>
+    <!-- Replace this path with a Workshop preview image under 1 MB. -->
+    <Image Value="C:\Path\To\Preview.png"/>
+    <Visibility Value="FriendsOnly"/>
+  </UpdateItem>
+</Tasks>
