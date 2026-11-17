@@ -19,6 +19,8 @@
 - **Empty village battle.** The quest raid's campaign state stays available while Bannerlord spawns the player and both armies.
 - **Crash when leaving the battlefield.** The raid stays protected through agent cleanup. If a troop's campaign entry is missing at cleanup, the patch uses the mission character to preserve a living hero's health and lets the game finish closing the mission.
 - **Deployment fallback.** On a Bannerlord Together gameplay host, the patch catches nonfatal managed exceptions from deployment setup and completion. If the battle opens with missing troops or a missing player, it records a `BROKEN_START_…` entry. This fallback can leave the battle unplayable.
+- **Xorberax Shoulder Camera compatibility.** During a co-op transition with no current mission, Xorberax uses the normal camera instead of reading the missing mission clock. The hook activates when the compatible Xorberax package is loaded.
+- **Leaving captivity in co-op.** The relocation search handles nearby parties without a faction. If relocation still throws a null reference during local player release, native captivity cleanup continues.
 
 ## Compatibility
 
@@ -28,7 +30,8 @@
 | Bannerlord Together | **v0.5.0.1**, Steam Workshop build |
 | Harmony | **v2.4.2.248** |
 
-The original spawn fix was confirmed in a host session. The exit fix and renamed release passed the Windows .NET Framework patch-binding tests. A replay of the affected quest exit and a two-player regression test remain open. This patch targets the quest lifecycle and the two deployment methods.
+The original spawn fix was confirmed in a host session. The exit fix and renamed release passed the Windows .NET Framework patch-binding tests. A replay of the affected quest exit and a two-player regression test remain open.
+The v0.2.4 camera hook was tested for binding with Xorberax’s Legacy **v1.0.8.8**. The two new fixes still need a live co-op replay.
 
 ## Install
 
@@ -42,10 +45,12 @@ Open `%LOCALAPPDATA%\BannerlordTogetherCrashGuard\battle.log`.
 
 | Log entry | Meaning |
 | --- | --- |
-| `Loaded v0.2.3` | Harmony patches loaded |
+| `Loaded v0.2.4` | Harmony patches loaded |
 | `Inactive: Unsupported … SHA-256` | Installed binary differs from the supported build |
 | `[DEPLOY-GUARD] BROKEN_START_…` | Deployment exception was caught and spawn checks found a problem |
 | `[QUEST-RAID-EXIT] completed` | Mission cleanup returned. Check the quest result on the campaign map. |
+| `[SHOULDER-CAMERA] Used normal camera` | Xorberax skipped the ranged camera adjustment during a co-op transition |
+| `[CAPTIVITY-EXIT]` | Relocation encountered missing faction data or failed before release cleanup completed |
 
 When reporting an issue, include the game and mod versions and the relevant section of the log. Remove personal details before posting logs publicly.
 
@@ -57,4 +62,4 @@ PowerShell with an x64 .NET SDK and the target game and mods installed.
 .\build.ps1 -GameDir "D:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord" -SmokeTest
 ```
 
-Use `-HarmonyBin` and `-TogetherBin` if the dependency DLLs are outside the expected Steam Workshop layout. The build creates a release ZIP in `dist`. The smoke test checks Harmony bindings and the deployment diagnostic classifications without starting the game.
+Use `-HarmonyBin` and `-TogetherBin` if the dependency DLLs are outside the expected Steam Workshop layout. The build creates a release ZIP in `dist`. The smoke test checks Harmony bindings, the captivity IL replacement, and deployment diagnostic classifications without starting the game. Pass `-XorberaxBin` with the folder containing `XorberaxLegacy.dll` to exercise the optional camera hook too.

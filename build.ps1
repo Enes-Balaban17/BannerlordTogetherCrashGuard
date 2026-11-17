@@ -3,6 +3,7 @@ param(
     [string]$GameDir = 'D:\SteamLibrary\steamapps\common\Mount & Blade II Bannerlord',
     [string]$HarmonyBin,
     [string]$TogetherBin,
+    [string]$XorberaxBin,
     [switch]$SmokeTest
 )
 
@@ -23,9 +24,10 @@ if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
 $dll = Join-Path $PSScriptRoot 'src\bin\Release\net472\BannerlordTogetherCrashGuard.dll'
 if ($SmokeTest) {
-    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'tests\smoke.ps1') `
-        (Join-Path $GameDir $client) (Join-Path $GameDir "Modules\SandBox\$client") `
-        $HarmonyBin $TogetherBin $dll
+    $smokeArgs = @((Join-Path $GameDir $client), (Join-Path $GameDir "Modules\SandBox\$client"),
+        $HarmonyBin, $TogetherBin, $dll)
+    if ($XorberaxBin) { $smokeArgs += (Resolve-Path -LiteralPath $XorberaxBin).Path }
+    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'tests\smoke.ps1') @smokeArgs
     if ($LASTEXITCODE -ne 0) { throw "Harmony smoke test failed with exit code $LASTEXITCODE" }
 }
 

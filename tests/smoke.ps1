@@ -1,4 +1,4 @@
-param($GameBin, $SandboxBin, $HarmonyBin, $TogetherBin, $FixDll)
+param($GameBin, $SandboxBin, $HarmonyBin, $TogetherBin, $FixDll, $XorberaxBin)
 
 $ErrorActionPreference = 'Stop'
 foreach ($dependency in 'Library','ObjectSystem','DotNet','Engine','Core','CampaignSystem','MountAndBlade') {
@@ -20,12 +20,46 @@ $expected = @(
     'TaleWorlds.MountAndBlade.Mission.OnTick'
     'TaleWorlds.MountAndBlade.Mission.EndMissionInternal'
     'TaleWorlds.CampaignSystem.AgentOrigins.PartyGroupAgentOrigin.OnAgentRemoved'
+    'TaleWorlds.CampaignSystem.Party.MobileParty.TeleportPartyToOutSideOfEncounterRadius'
 )
 try {
     $harmony.PatchAll($fix)
     $actual = @($harmony.GetPatchedMethods() | ForEach-Object { "$($_.DeclaringType.FullName).$($_.Name)" })
     if (Compare-Object $expected $actual) { throw "Unexpected patch targets: $($actual -join ', ')" }
     $actual | ForEach-Object { "Patched $_" }
+    $binding = [Reflection.BindingFlags]'NonPublic, Static'
+    $teleport = $harmony.GetPatchedMethods() | Where-Object Name -eq 'TeleportPartyToOutSideOfEncounterRadius'
+    $captivity = $fix.GetType('BannerlordTogetherCrashGuard.CaptivityReleasePatch', $true)
+    $rewrite = $captivity.GetMethod('Transpiler', $binding)
+    $original = [HarmonyLib.PatchProcessor]::GetOriginalInstructions($teleport)
+    $rewritten = $rewrite.Invoke($null, [object[]]@(,$original))
+    $calls = @($rewritten | Where-Object { $_.operand -is [Reflection.MethodInfo] -and $_.operand.Name -eq 'IsNearbyPartyHostile' })
+    if ($calls.Count -ne 1 -or
+        !([HarmonyLib.Harmony]::GetPatchInfo($teleport).Finalizers | Where-Object owner -eq $owner)) {
+        throw 'Captivity relocation rewrite or fallback was not installed'
+    }
+    'Captivity check replacement and relocation fallback passed.'
+
+    $camera = $fix.GetType('BannerlordTogetherCrashGuard.ShoulderCameraCompatibility', $true)
+    $camera.GetMethod('Apply', $binding).Invoke($null, @($harmony))
+    if (@($harmony.GetPatchedMethods()).Count -ne $expected.Count) {
+        throw 'Camera compatibility should be inert without Xorberax'
+    }
+    if ($XorberaxBin) {
+        $gameRoot = Split-Path -Parent (Split-Path -Parent $GameBin)
+        foreach ($dependency in 'ScreenSystem','InputSystem','MountAndBlade.ViewModelCollection') {
+            [void][Reflection.Assembly]::LoadFrom((Join-Path $GameBin "TaleWorlds.$dependency.dll"))
+        }
+        [void][Reflection.Assembly]::LoadFrom((Join-Path $gameRoot 'Modules\Native\bin\Win64_Shipping_Client\TaleWorlds.MountAndBlade.View.dll'))
+        $xorberax = [Reflection.Assembly]::LoadFrom((Join-Path $XorberaxBin 'XorberaxLegacy.dll'))
+        $target = $camera.GetMethod('FindTarget', $binding).Invoke($null, @($xorberax))
+        if (!$target) { throw 'Optional Xorberax target was not found' }
+        $camera.GetMethod('Apply', $binding).Invoke($null, @($harmony))
+        $camera.GetMethod('Apply', $binding).Invoke($null, @($harmony))
+        $prefixes = @([HarmonyLib.Harmony]::GetPatchInfo($target).Prefixes | Where-Object owner -eq $owner)
+        if ($prefixes.Count -ne 1) { throw 'Expected exactly one optional Xorberax prefix' }
+        "Optional camera hook passed on Xorberax $($xorberax.GetName().Version)."
+    }
     foreach ($method in 'SetupTeams','FinishDeployment') {
         $target = $harmony.GetPatchedMethods() | Where-Object Name -eq $method
         $guard = [HarmonyLib.Harmony]::GetPatchInfo($target).Finalizers |
@@ -34,7 +68,6 @@ try {
     }
 
     $guardType = $fix.GetType('BannerlordTogetherCrashGuard.DeploymentCrashGuard', $true)
-    $binding = [Reflection.BindingFlags]'NonPublic, Static'
     $classify = $guardType.GetMethod('Classify', $binding)
     $cases = @(
         @{ Input = @(0, 0, $false, $true, $false); Expected = 'BROKEN_START_EMPTY_BATTLE' }
@@ -60,4 +93,4 @@ try {
     $harmony.UnpatchAll($owner)
 }
 if (@($harmony.GetPatchedMethods()).Count -ne 0) { throw 'Smoke patches failed to unload' }
-'All nine patch targets installed and unloaded on .NET Framework.'
+'All patch targets installed and unloaded on .NET Framework.'

@@ -32,6 +32,14 @@ The native callback evaluates `Troop.IsHero` and writes hero health through a se
 
 The v0.2.2 Release build and nine-target Harmony smoke test passed. The Uthelaim quest exit and save/reload remain to be verified in-game.
 
+## Client battle exit and captivity release
+
+During a co-op field battle the client left after victory. Bannerlord Together had already cleared the live battle state when Bannerlord reactivated a mission screen. The managed stack points to `XorberaxLegacy.Patches.ShoulderCameraPatch.ShouldRevertCameraForRangedMode` at the read of `Mission.Current.CurrentTime`. The installed Xorberax v1.0.8.8 implementation uses the global mission for this clock. v0.2.4 asks the optional camera helper to revert to the normal camera for a co-op frame with no current mission.
+
+In the earlier session, the client reached the release menu and its first-chance log recorded a null reference in `MobileParty.TeleportPartyToOutSideOfEncounterRadius`. No fatal stack identifies the exact dereference. The native relocation loop calls `IsAtWarWith` on a nearby party's faction without checking for a faction. The host also logged a leaderless co-op projection nearby in time. v0.2.4 handles missing faction data during the local co-op player's captivity release and leaves the native position search in place. If relocation still throws a null reference, its narrow fallback lets native release processing continue. Captor state and events remain owned by Bannerlord and Bannerlord Together.
+
+The build smoke test confirmed the native IL replacement, its fallback and the optional camera hook against the installed Xorberax v1.0.8.8 assembly. For live validation, first replay a co-op victory and leave the battlefield with Shoulder Camera enabled on the client. Then reproduce release from a mobile captor and confirm that Continue returns control to the client, the hero is free, and the host receives the updated state. Live co-op testing remains open.
+
 ## Pinned runtime inputs
 
 The module checks these binary SHA-256 values at startup because its patch targets include private game methods.

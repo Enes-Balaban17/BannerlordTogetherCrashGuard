@@ -49,6 +49,22 @@ namespace BannerlordTogetherCrashGuard
             base.OnSubModuleUnloaded();
         }
 
+        protected override void OnBeforeInitialModuleScreenSetAsRoot()
+        {
+            base.OnBeforeInitialModuleScreenSetAsRoot();
+            if (_harmony == null)
+                return;
+
+            try
+            {
+                ShoulderCameraCompatibility.Apply(_harmony);
+            }
+            catch (Exception exception) when (DeploymentCrashGuard.CanSuppress(exception))
+            {
+                BattleLog.Write($"[SHOULDER-CAMERA] Optional hook unavailable: {exception.Message}");
+            }
+        }
+
         private static void CheckBuild(Assembly assembly, string expected)
         {
             using (var sha = SHA256.Create())
