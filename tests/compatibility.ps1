@@ -89,6 +89,13 @@ try {
         'BannerlordTogether.SpNativeBattle.SpNativeBattleClientMissionBehavior.ApplySyntheticFatalBlow',
         'BannerlordTogether.ArmySyncBehavior.TryEnsurePlayerArmyForLeader',
         'BannerlordTogether.ArmySyncBehavior.CreateClientArmy',
+        'BannerlordTogether.ArmySyncBehavior.ApplyBatch',
+        'BannerlordTogether.BattleSyncBehavior.TryTriggerArmyBattle',
+        'BannerlordTogether.BattleSyncBehavior.SendLocalBattleStart',
+        'TaleWorlds.CampaignSystem.ViewModelCollection.ArmyManagement.ArmyManagementVM.ExecuteDone',
+        'TaleWorlds.CampaignSystem.ViewModelCollection.ArmyManagement.ArmyManagementVM.ExecuteDisbandArmy',
+        'TaleWorlds.CampaignSystem.GameComponents.DefaultArmyManagementCalculationModel.CanPlayerCreateArmy',
+        'TaleWorlds.CampaignSystem.EncounterManager.StartPartyEncounter',
         'TaleWorlds.CampaignSystem.Army.HourlyTick',
         'OffTheClock.CampaignTweaks.TweakWorkshopModel.get_MaximumWorkshopsPlayerCanHave',
         'OffTheClock.CampaignTweaks.TweakClanTierModel.GetCompanionLimit',
@@ -560,6 +567,7 @@ public sealed class BankSaveFixture : TaleWorlds.CampaignSystem.IDataStore {
     if ($army.GetMethod('Available', $flags).Invoke($null, [object[]]@($null))) { throw 'Missing party can enter clan army' }
     'Personal banking passed: funded debit/credit conservation, stale/negative rejection, zero-balance interest and isolated per-character save/load. Army/death hook bindings and unrelated-exception preservation passed.'
 
+    . (Join-Path $PSScriptRoot 'army.ps1')
     $settings = $fix.GetType('BannerlordTogetherCrashGuard.HostSettingsCompatibility', $true)
     $bindings = $settings.GetField('Bindings', $flags).GetValue($null)
     $instanceFlags = [Reflection.BindingFlags]'Instance, NonPublic'

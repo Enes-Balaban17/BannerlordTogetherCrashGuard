@@ -50,6 +50,7 @@ namespace BannerlordTogetherCrashGuard
             Install("Battle rewards", () => RewardShareCompatibility.Install(harmony));
             Install("Battle death replay", () => BattleDeathCompatibility.Install(harmony));
             Install("Clan and co-op armies", () => ClanArmyCompatibility.Install(harmony));
+            Install("Army battle identity", () => ArmyBattleCompatibility.Install(harmony));
             Hook(harmony, "TogetherLordsCore.PeerSync.PacketDispatchPostfix", "Postfix", nameof(IgnoreOurExtensionInLordsPrefix), null);
         }
 
@@ -58,6 +59,7 @@ namespace BannerlordTogetherCrashGuard
             if (!(TaleWorlds.Core.Game.Current?.GameType is Campaign) || TaleWorlds.Core.Game.Current.GameTextManager == null)
                 return;
             Install("Clan income", () => ClanIncomeCompatibility.Install(harmony));
+            Install("Army interface", () => ArmyInterfaceCompatibility.Install(harmony));
         }
 
         private static void Install(string feature, Action apply)

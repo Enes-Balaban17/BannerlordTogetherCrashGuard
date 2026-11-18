@@ -4,6 +4,7 @@ using System.Linq;
 using BannerlordTogether;
 using BannerlordTogether.Network;
 using HarmonyLib;
+using SandBox.View.Map;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.GameState;
@@ -19,8 +20,9 @@ namespace BannerlordTogetherCrashGuard
     {
         private static readonly HashSet<string> Leaders = new HashSet<string>();
         private static bool _open;
+        private static bool _shortcutHeld;
         private static Type Sync => typeof(ArmySyncBehavior);
-        public ClanArmyCompatibility() { Leaders.Clear(); _open = false; }
+        public ClanArmyCompatibility() { Leaders.Clear(); _open = false; _shortcutHeld = false; ArmyBattleCompatibility.Reset(); }
         public override void RegisterEvents()
         {
             CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, _ =>
@@ -56,7 +58,7 @@ namespace BannerlordTogetherCrashGuard
                 new HarmonyMethod(typeof(ClanArmyCompatibility), prefix));
         internal static bool Independent(Army army) => army?.Kingdom == null && army?.LeaderParty != null &&
             Leaders.Contains(army.LeaderParty.StringId) && army.LeaderParty.LeaderHero?.Clan?.Kingdom == null;
-        private static bool Human(MobileParty party) => party != null && (party == MobileParty.MainParty ||
+        internal static bool Human(MobileParty party) => party != null && (party == MobileParty.MainParty ||
             CoopSession.GhostPartyIds.Contains(party.StringId));
         internal static bool Available(MobileParty party) => party != null && party.IsActive && !party.IsDisbanding &&
             party.LeaderHero != null && !party.LeaderHero.IsDead && !party.LeaderHero.IsPrisoner &&
@@ -76,7 +78,14 @@ namespace BannerlordTogetherCrashGuard
             if (!CoopSession.IsActive || leader?.LeaderHero?.Clan == null || leader.LeaderHero.Clan.Kingdom != null ||
                 leader.Army != null || !Human(leader)) return true;
             if (!Available(leader)) { army = null; reason = "clan-army-leader-unavailable"; __result = false; return false; }
-            try { army = Create(leader, Army.ArmyTypes.Defender); reason = ""; __result = true; }
+            try
+            {
+                Kingdom kingdom = OwnerClan(leader)?.Kingdom;
+                army = kingdom == null ? Create(leader, Army.ArmyTypes.Defender) :
+                    (Army)AccessTools.Method(Sync, "CreateArmyAllowingRemotePlayerProxyForDebug").Invoke(null,
+                        new object[] { kingdom, leader, Army.ArmyTypes.Defender, "Crash Guard shared-clan player army" });
+                reason = army == null ? "clan-army-creation-failed" : ""; __result = army != null;
+            }
             catch (Exception error) when (DeploymentCrashGuard.CanSuppress(error))
             { army = null; reason = "clan-army-creation-failed"; __result = false; BattleLog.Write("[CLAN-ARMY] " + error); }
             return false;
@@ -127,13 +136,40 @@ namespace BannerlordTogetherCrashGuard
         }
         internal static void Tick()
         {
-            if (Input.IsKeyDown(InputKey.LeftAlt) && Input.IsKeyPressed(InputKey.A)) Show();
+            if (Campaign.Current == null || Mission.Current != null) { _shortcutHeld = false; return; }
+            var input = MapScreen.Instance?.Input;
+            bool down = input != null
+                ? (input.IsKeyDown(InputKey.LeftAlt) || input.IsKeyDown(InputKey.RightAlt)) && input.IsKeyDown(InputKey.A)
+                : (Input.IsKeyDown(InputKey.LeftAlt) || Input.IsKeyDown(InputKey.RightAlt)) && Input.IsKeyDown(InputKey.A);
+            if (!ShortcutPressed(down)) return;
+            if ((bool)(AccessTools.Property(typeof(PlayerChatBehavior), "IsChatTextInputFocused")?.GetValue(null) ?? false)) return;
+            Show();
         }
-        private static bool MapReady() => CoopSession.IsActive && CoopSession.IsSessionReady && Mission.Current == null &&
-            Game.Current?.GameStateManager.ActiveState is MapState && Campaign.Current?.CurrentMenuContext == null && Available(MobileParty.MainParty);
+        internal static bool ShortcutPressed(bool down)
+        {
+            bool pressed = down && !_shortcutHeld;
+            _shortcutHeld = down;
+            return pressed;
+        }
+        internal static bool AllowedMenu(string id) => string.IsNullOrEmpty(id) || id == "army_wait";
+        private static string BlockReason()
+        {
+            if (!CoopSession.IsActive) return "Start or join a Bannerlord Together session first.";
+            if (!CoopSession.IsSessionReady) return "Wait for the co-op session to finish loading/synchronizing.";
+            if (Mission.Current != null || !(Game.Current?.GameStateManager?.ActiveState is MapState)) return "Open the army menu on the campaign map.";
+            if (MobileParty.MainParty?.CurrentSettlement != null) return "Leave the settlement before managing the army.";
+            if (!Available(MobileParty.MainParty)) return "Army actions are unavailable during battle, captivity or sea travel.";
+            if (!AllowedMenu(Campaign.Current?.CurrentMenuContext?.GameMenu?.StringId)) return "Close the current encounter/menu before managing the army.";
+            return null;
+        }
+        private static bool MapReady() => BlockReason() == null;
         internal static void Show()
         {
-            if (_open || !MapReady()) return;
+            if (_open) { Info("Close the current army selection first."); return; }
+            string reason = BlockReason();
+            if (reason != null) { BattleLog.Write("[CLAN-ARMY] menu blocked: " + reason); Info(reason); return; }
+            BattleLog.Write("[CLAN-ARMY] opening menu role=" + (CoopSession.IsClient ? "client" : "host") +
+                " context=" + (Campaign.Current.CurrentMenuContext?.GameMenu?.StringId ?? "map"));
             var options = new List<InquiryElement>();
             MobileParty local = MobileParty.MainParty;
             if (local.Army == null || local.Army.LeaderParty == local)
@@ -180,24 +216,29 @@ namespace BannerlordTogetherCrashGuard
                 Call(local, party);
             });
         }
-        private static void Call(MobileParty leader, MobileParty party)
+        internal static void Call(MobileParty leader, MobileParty party, bool announce = true)
         {
             Army army = leader.Army;
             if (army != null && army.LeaderParty != leader) throw new InvalidOperationException("Only the army leader can call parties");
             if (army == null)
             {
-                Kingdom kingdom = leader.LeaderHero.Clan.Kingdom;
+                Kingdom kingdom = OwnerClan(leader)?.Kingdom;
                 army = kingdom == null ? Create(leader, Army.ArmyTypes.Defender) :
                     (Army)AccessTools.Method(Sync, "CreateArmyAllowingRemotePlayerProxyForDebug").Invoke(null,
                         new object[] { kingdom, leader, Army.ArmyTypes.Defender, "Crash Guard clan party call" });
                 if (army == null) throw new InvalidOperationException("Could not create clan army");
             }
             party.Army = army;
+            if (party.AttachedTo == leader) return;
+            if (party.CurrentSettlement != null) LeaveSettlementAction.ApplyForParty(party);
             party.SetMoveEscortParty(leader, party.NavigationCapability, false);
-            Dirty(); Info("Called " + party.Name + ". The party will travel to the army leader.");
+            party.Ai.RethinkAtNextHourlyTick = true;
+            Dirty(); if (announce) Info("Called " + party.Name + ". The party will travel to the army leader.");
         }
         internal static void Receive(int peer, Dictionary<string, string> values)
         {
+            if (values.TryGetValue("army/manage", out string selection))
+            { ArmyInterfaceCompatibility.Accept(peer, selection); return; }
             if (!values.ContainsKey("army/call") && !values.ContainsKey("army/disband")) return;
             MobileParty leader = CoopPeerIdentity.HeroForPeer(peer)?.PartyBelongedTo;
             if (!Available(leader) || !Human(leader) || leader.CurrentSettlement != null ||
@@ -214,9 +255,18 @@ namespace BannerlordTogetherCrashGuard
         }
         internal static bool EligibleMember(MobileParty leader, MobileParty party) => Available(leader) && Available(party) &&
             party != leader && !Human(party) && party.IsLordParty && party.Army == null &&
-            party.LeaderHero.Clan == leader.LeaderHero.Clan && party.CurrentSettlement?.SiegeEvent == null &&
-            !leader.LeaderHero.Clan.IsUnderMercenaryService;
-        private static void Intent(MobileParty leader, PlayerArmyActionKind action)
+            OwnerClan(leader) != null && party.LeaderHero.Clan == OwnerClan(leader) && party.CurrentSettlement?.SiegeEvent == null &&
+            !OwnerClan(leader).IsUnderMercenaryService;
+        internal static Clan OwnerClan(MobileParty leader)
+        {
+            if (Human(leader) && ClanIncomeCompatibility.SharedMode())
+            {
+                if (CoopSession.IsHost) return Clan.PlayerClan;
+                return Clan.All.FirstOrDefault(clan => clan.StringId == CoopCompatibilityBehavior.HostClan) ?? leader.LeaderHero.Clan;
+            }
+            return leader?.LeaderHero?.Clan;
+        }
+        internal static void Intent(MobileParty leader, PlayerArmyActionKind action)
         {
             MobileParty member = MobileParty.MainParty;
             if (ArmySyncBehavior.Instance == null || leader == member || !Available(member) || !Available(leader)) return;
@@ -234,19 +284,27 @@ namespace BannerlordTogetherCrashGuard
             if (CoopSession.IsHost) ArmySyncBehavior.Instance.HandlePlayerArmyIntent(packet);
             else CoopSession.Client?.SendRaw(PacketSerializer.SerializePlayerArmyIntent(packet));
         }
-        private static void Dirty()
+        internal static void Dirty()
         {
             if (ArmySyncBehavior.Instance != null) AccessTools.Method(Sync, "MarkNativeArmySyncDirty").Invoke(ArmySyncBehavior.Instance, new object[] { "Crash Guard clan army action" });
         }
         private static void Pick(string title, string text, List<InquiryElement> options, Action<object> action)
         {
             _open = true;
-            MBInformationManager.ShowMultiSelectionInquiry(new MultiSelectionInquiryData(title, text, options, true, 1, 1, "Select", "Cancel",
+            var inquiry = new MultiSelectionInquiryData(title, text, options, true, 1, 1, "Select", "Cancel",
                 selected => { _open = false; try { if (selected.Count > 0) action(selected[0].Identifier); }
                     catch (Exception error) when (DeploymentCrashGuard.CanSuppress(error)) { BattleLog.Write("[CLAN-ARMY] " + error); Info("Army action failed. See battle.log."); } },
-                _ => { _open = false; }));
+                _ => { _open = false; });
+            try
+            {
+                var show = AccessTools.Method(AccessTools.TypeByName("E.ec"), "A", new[] { typeof(MultiSelectionInquiryData), typeof(bool), typeof(bool) });
+                if (show != null) show.Invoke(null, new object[] { inquiry, false, false });
+                else MBInformationManager.ShowMultiSelectionInquiry(inquiry);
+            }
+            catch (Exception error) when (DeploymentCrashGuard.CanSuppress(error.GetBaseException()))
+            { _open = false; BattleLog.Write("[CLAN-ARMY] menu failed " + error); Info("Could not open army menu; see battle.log."); }
         }
-        private static void Info(string text) => InformationManager.DisplayMessage(new InformationMessage("[Crash Guard] " + text));
+        internal static void Info(string text) => InformationManager.DisplayMessage(new InformationMessage("[Crash Guard] " + text));
     }
     public static class ClanArmyCommands
     {

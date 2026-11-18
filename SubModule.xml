@@ -2,7 +2,7 @@
 <Module>
   <Name value="Bannerlord Together Crash Guard"/>
   <Id value="BannerlordTogetherCrashGuard"/>
-  <Version value="v0.5.1"/>
+  <Version value="v0.5.2"/>
   <DefaultModule value="false"/>
   <ModuleCategory value="Singleplayer"/>
   <ModuleType value="Community"/>

@@ -269,6 +269,7 @@ namespace BannerlordTogetherCrashGuard
             {
                 HostSettingsCompatibility.Apply(message.Values);
                 PersonalBankCompatibility.Instance?.Apply(message.Values);
+                ArmyInterfaceCompatibility.ApplyResult(message.Values);
                 if (message.Values.TryGetValue("character", out string character))
                     CultureCompatibility.LocalCharacterId = character;
                 if (message.Values.TryGetValue("clan", out string clan))

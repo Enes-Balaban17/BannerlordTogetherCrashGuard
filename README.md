@@ -16,7 +16,15 @@
 
 ## What it fixes
 
-**v0.5.1 fixes the v0.5.0 campaign-load crash.** Finance hooks now wait for the campaign game/text manager instead of initializing the native finance class at the main menu. Restart Bannerlord after updating. Startup lifecycle, compilation, installed-binary hook bindings and managed regression checks pass; live co-op validation of the development features below remains pending. Keep a separate backup of your campaign before testing.
+**v0.5.2 adds army-management and client-deployment corrections and retains the v0.5.1 startup fix.** Restart Bannerlord after updating and install the same version on every peer. Startup lifecycle, compilation, installed-binary hook bindings and managed regression checks pass; live co-op validation remains pending. Keep a separate backup of your campaign before testing.
+
+### Army corrections in v0.5.2
+
+Alt+A now uses campaign-map input and also works in the normal army waiting menu. A blocked action reports its reason. Independent clan leaders and co-op client leaders can confirm NPC clan-party selections through the native army screen; the host validates and applies them, with no ten-party cap added by this adapter. Selection transport is bounded to 512 IDs and the normal packet size. Client leaders receive host confirmation. Available parties are ordered to leave settlements and escort the leader.
+
+To join another human's army, move into normal map contact with its leader or a member. This sends the native authenticated join intent. Alt+A remains an alternative. Joining from far away does not teleport you; move near and merge. Only army leaders manage NPC membership; humans choose their own membership.
+
+Battle-start handling now matches host IDs with local army ghosts and registers nearby/attached co-op members through native host battle membership. Client deployment waits for its existing local player body; it never creates a dummy hero to bypass loading. If that body remains missing for 30 seconds, or native setup still throws a null reference, it logs the failure and requests client mission exit. Recovery and participation across village defense, field battles, siege assaults and sally-outs still need live testing.
 
 ### New in v0.5.0
 
@@ -74,11 +82,11 @@ The v0.2.4 camera hook was tested for binding with Xorberax’s Legacy **v1.0.8.
 
 ## Install
 
-**Recommended:** download `BannerlordTogetherCrashGuard-v0.5.1-Setup.exe` from [Releases](https://github.com/Enes-Balaban17/BannerlordTogetherCrashGuard/releases/latest), run it, and select the Bannerlord game folder. The installer includes the mod payload/license, automatically removes the installed module files' Windows download block (`Zone.Identifier`), and keeps a backup of an existing installation. No separate PowerShell or DLL-unblock step is needed. It only unblocks this mod's installed files; it does not change other mods or Windows security settings.
+**Recommended:** download `BannerlordTogetherCrashGuard-v0.5.2-Setup.exe` from [Releases](https://github.com/Enes-Balaban17/BannerlordTogetherCrashGuard/releases/latest), run it, and select the Bannerlord game folder. The installer includes the mod payload/license, automatically removes the installed module files' Windows download block (`Zone.Identifier`), and keeps a backup of an existing installation. No separate PowerShell or DLL-unblock step is needed. It only unblocks this mod's installed files; it does not change other mods or Windows security settings.
 
 1. Extract the release ZIP into the Bannerlord installation. The launcher manifest should be at `Modules\BannerlordTogetherCrashGuard\SubModule.xml`.
 2. In **Singleplayer → Mods**, enable **Bannerlord Together Crash Guard** below **BannerlordTogether**. Keep **BLT Deployment Crash Guard** disabled.
-3. Install **the same v0.5.1 build on the host and every client**, with the same optional mod versions and asset packs. Missing optional mods are skipped. Run the setup executable if you prefer installation without manual PowerShell commands.
+3. Install **the same v0.5.2 build on the host and every client**, with the same optional mod versions and asset packs. Missing optional mods are skipped. Run the setup executable if you prefer installation without manual PowerShell commands.
 4. If upgrading from **BLT Village Battle Fix**, remove the old copy from `Modules` and enable the new entry. Because the module ID changed in v0.2.3, an existing save may show the former module as missing. Starting with v0.3.0, compatibility identities and reward/projection bookkeeping are stored as campaign save data.
 
 For older dead encyclopedia duplicates, use the developer console to list exact IDs with `btcg.find_dead_heroes <name>`, then hide only the unwanted IDs with `btcg.hide_dead_heroes <id> [more ids]`. This hides entries and preserves the underlying save objects.
@@ -89,7 +97,7 @@ Open `%LOCALAPPDATA%\BannerlordTogetherCrashGuard\battle.log`.
 
 | Log entry | Meaning |
 | --- | --- |
-| `Loaded v0.5.1` | Harmony patches loaded |
+| `Loaded v0.5.2` | Harmony patches loaded |
 | `Inactive: Unsupported … SHA-256` | Installed binary differs from the supported build |
 | `[DEPLOY-GUARD] BROKEN_START_…` | Deployment exception was caught and spawn checks found a problem |
 | `[QUEST-RAID-EXIT] completed` | Mission cleanup returned. Check the quest result on the campaign map. |
