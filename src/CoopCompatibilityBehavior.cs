@@ -61,6 +61,7 @@ namespace BannerlordTogetherCrashGuard
         {
             GhostEncyclopediaCompatibility.ImportLegacyLogEvidence();
             GhostEncyclopediaCompatibility.RestoreHiddenEntries();
+            HostSettingsCompatibility.InstallChangeHooks(new Harmony(SubModule.Owner));
         }
 
         public override void SyncData(IDataStore dataStore)
@@ -118,6 +119,7 @@ namespace BannerlordTogetherCrashGuard
                 { Report("receive", exception); }
             }
             RewardShareCompatibility.Tick();
+            PersonalBankCompatibility.Instance?.Tick(dt);
             AppearanceCompatibility.TickFullStates();
             if (_requestFullSync && CoopSession.IsClient && HasHostState)
             {
@@ -223,6 +225,7 @@ namespace BannerlordTogetherCrashGuard
                     SmithingCompatibility.Capture(welcome);
                     GarrisonsCompatibility.Capture(welcome);
                     RewardShareCompatibility.Capture(welcome, _peers.Keys);
+                    PersonalBankCompatibility.Instance?.Capture(envelope.PeerId, welcome);
                     SendState(envelope.PeerId, welcome);
                     AppearanceCompatibility.SendFullState(envelope.PeerId);
                     _runtimeDirty = true;
@@ -238,6 +241,8 @@ namespace BannerlordTogetherCrashGuard
                         Campaign.Current.SpeedUpMultiplier = speed;
                     else if (message.Kind == 4)
                     {
+                        PersonalBankCompatibility.Instance?.Receive(envelope.PeerId, message.Values);
+                        ClanArmyCompatibility.Receive(envelope.PeerId, message.Values);
                         AppearanceCompatibility.AcceptClientChanges(message.Values);
                         SmithingCompatibility.AcceptClientChanges(message.Values);
                         RewardShareCompatibility.AcceptRelease(envelope.PeerId, message.Values);
@@ -262,6 +267,7 @@ namespace BannerlordTogetherCrashGuard
             try
             {
                 HostSettingsCompatibility.Apply(message.Values);
+                PersonalBankCompatibility.Instance?.Apply(message.Values);
                 if (message.Values.TryGetValue("character", out string character))
                     CultureCompatibility.LocalCharacterId = character;
                 if (message.Values.TryGetValue("clan", out string clan))
@@ -359,6 +365,7 @@ namespace BannerlordTogetherCrashGuard
                     SmithingCompatibility.Capture(state);
                 }
                 var personal = new Dictionary<string, string>(state);
+                if (full) PersonalBankCompatibility.Instance?.Capture(peer, personal);
                 personal["income-index"] = (Array.IndexOf(_peers.Keys.OrderBy(id => id).ToArray(), peer) + 1).ToString(CultureInfo.InvariantCulture);
                 SendState(peer, personal);
                 if (full)

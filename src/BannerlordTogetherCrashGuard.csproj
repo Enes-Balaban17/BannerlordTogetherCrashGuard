@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <AssemblyTitle>Bannerlord Together Crash Guard</AssemblyTitle>
     <Product>Bannerlord Together Crash Guard</Product>
     <PlatformTarget>x64</PlatformTarget>
@@ -18,6 +18,7 @@
     <Reference Include="BannerlordTogether" HintPath="$(TogetherBin)\BannerlordTogether.dll" Private="false" />
     <Reference Include="SandBox" HintPath="$(SandboxBin)\SandBox.dll" Private="false" />
     <Reference Include="TaleWorlds.Library" HintPath="$(GameBin)\TaleWorlds.Library.dll" Private="false" />
+    <Reference Include="TaleWorlds.InputSystem" HintPath="$(GameBin)\TaleWorlds.InputSystem.dll" Private="false" />
     <Reference Include="TaleWorlds.ObjectSystem" HintPath="$(GameBin)\TaleWorlds.ObjectSystem.dll" Private="false" />
     <Reference Include="TaleWorlds.Engine" HintPath="$(GameBin)\TaleWorlds.Engine.dll" Private="false" />
     <Reference Include="TaleWorlds.DotNet" HintPath="$(GameBin)\TaleWorlds.DotNet.dll" Private="false" />

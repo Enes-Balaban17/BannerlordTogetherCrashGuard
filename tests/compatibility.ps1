@@ -71,6 +71,12 @@ try {
     $required = @(
         'XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior.Withdraw',
         'XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior.UpdateBankData',
+        'XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior.Deposit',
+        'XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior.TryOpenBankAccountAtSettlement',
+        'BannerlordTogether.SpNativeBattle.SpNativeBattleClientMissionBehavior.ApplySyntheticFatalBlow',
+        'BannerlordTogether.ArmySyncBehavior.TryEnsurePlayerArmyForLeader',
+        'BannerlordTogether.ArmySyncBehavior.CreateClientArmy',
+        'TaleWorlds.CampaignSystem.Army.HourlyTick',
         'OffTheClock.CampaignTweaks.TweakWorkshopModel.get_MaximumWorkshopsPlayerCanHave',
         'OffTheClock.CampaignTweaks.TweakClanTierModel.GetCompanionLimit',
         'CharacterReload.Utils.HeroUtils.UpdateHeroCharacterBodyProperties',
@@ -355,6 +361,8 @@ public static class IdleSyncFixture
 {
     public static TaleWorlds.CampaignSystem.Campaign Campaign;
     public static int Publishes;
+    public static int Resyncs;
+    public static bool ResyncPrefix(ref bool __result, ref string reason) { Resyncs++; reason = "fixture"; __result = false; return false; }
     public static bool CampaignGetter(ref TaleWorlds.CampaignSystem.Campaign __result) { __result = Campaign; return false; }
     public static bool PeerGetter(ref int[] __result) { __result = new int[] { 1 }; return false; }
     public static bool PublishPrefix(object __instance)
@@ -371,6 +379,7 @@ public sealed class ScalarSettingFixture { public int Value { get; set; } }
 '@
     $behaviorType = $fix.GetType('BannerlordTogetherCrashGuard.CoopCompatibilityBehavior', $true)
     $behavior = [Activator]::CreateInstance($behaviorType, $true)
+    [void][Activator]::CreateInstance($fix.GetType('BannerlordTogetherCrashGuard.PersonalBankCompatibility'), $true)
     $instanceFlags = [Reflection.BindingFlags]'Instance, NonPublic'
     $server = [Runtime.Serialization.FormatterServices]::GetUninitializedObject([BannerlordTogether.Network.CoopServer])
     $behaviorType.GetField('_network', $instanceFlags).SetValue($behavior, $server)
@@ -382,6 +391,7 @@ public sealed class ScalarSettingFixture { public int Value { get; set; } }
     $idleOwner.Patch([HarmonyLib.AccessTools]::PropertyGetter([TaleWorlds.CampaignSystem.Campaign], 'Current'), [HarmonyLib.HarmonyMethod]::new([IdleSyncFixture].GetMethod('CampaignGetter')), $null, $null, $null) | Out-Null
     $idleOwner.Patch([HarmonyLib.AccessTools]::PropertyGetter([BannerlordTogether.Network.CoopServer], 'GameplayPeerIds'), [HarmonyLib.HarmonyMethod]::new([IdleSyncFixture].GetMethod('PeerGetter')), $null, $null, $null) | Out-Null
     $idleOwner.Patch($behaviorType.GetMethod('Publish', $instanceFlags), [HarmonyLib.HarmonyMethod]::new([IdleSyncFixture].GetMethod('PublishPrefix')), $null, $null, $null) | Out-Null
+    $idleOwner.Patch([HarmonyLib.AccessTools]::Method([BannerlordTogether.PlayerTradeBehavior], 'BeginSaveResync'), [HarmonyLib.HarmonyMethod]::new([IdleSyncFixture].GetMethod('ResyncPrefix')), $null, $null, $null) | Out-Null
     $previousHost = [BannerlordTogether.CoopSession]::IsHost
     $previousClient = [BannerlordTogether.CoopSession]::IsClient
     $previousServer = [BannerlordTogether.CoopSession]::Server
@@ -394,6 +404,7 @@ public sealed class ScalarSettingFixture { public int Value { get; set; } }
         $tick = $behaviorType.GetMethod('TickCore', $instanceFlags)
         for ($frame = 0; $frame -lt 400; $frame++) { $tick.Invoke($behavior, [object[]]@([single]0.1)) }
         if ([IdleSyncFixture]::Publishes -ne 0) { throw 'Idle gameplay still triggers periodic full/settings publishing' }
+        if ([IdleSyncFixture]::Resyncs -ne 0) { throw 'Idle personal bank triggered a save-resync' }
         $behaviorType.GetMethod('MarkSettingsChanged', $instanceFlags).Invoke($behavior, $null)
         for ($frame = 0; $frame -lt 10; $frame++) { $tick.Invoke($behavior, [object[]]@([single]0.1)) }
         if ([IdleSyncFixture]::Publishes -ne 1) { throw 'A host setting edit did not cause exactly one publish' }
@@ -460,6 +471,81 @@ public sealed class ScalarSettingFixture { public int Value { get; set; } }
     if (!$speedType.GetMethod('IsExtra', $flags).Invoke($null, [object[]]@($extraSpeed)) -or
         $speedType.GetMethod('IsExtra', $flags).Invoke($null, [object[]]@([single]($extraSpeed + 0.5)))) { throw 'Configured Extra Fast multiplier was not recognized' }
     'Companion budget/upgrade ranking and synthetic clan destruction/notification guards passed; single-player notifications remain active.'
+
+    $bankBehavior = $fix.GetType('BannerlordTogetherCrashGuard.PersonalBankCompatibility', $true)
+    $accountType = $bankBehavior.GetNestedType('Account')
+    $requestType = $bankBehavior.GetNestedType('Request')
+    $account = [Activator]::CreateInstance($accountType)
+    $account.Open = $true; $account.Balance = 1000; $account.Interest = 50
+    $request = [Activator]::CreateInstance($requestType)
+    $request.Id = 'regression'; $request.Action = 'Withdraw'; $request.Amount = 400
+    $transaction = $bankBehavior.GetMethod('Transact', $flags)
+    $result = $transaction.Invoke($null, [object[]]@($account, $request, 100, 1000000, 1000, [double]10))
+    if ($result.GoldDelta -ne 400 -or $account.Balance -ne 600) { throw 'Host personal withdrawal did not debit principal' }
+    $request.Amount = 600
+    $result = $transaction.Invoke($null, [object[]]@($account, $request, 500, 1000000, 1000, [double]10))
+    if ($account.Balance -ne 0 -or $account.Interest -ne 0 -or $result.GoldDelta -ne 600) { throw 'Empty personal account retained interest' }
+    $result = $transaction.Invoke($null, [object[]]@($account, $request, 1100, 1000000, 1000, [double]10))
+    if ($result.GoldDelta -ne 0 -or $result.Message -eq 'accepted') { throw 'Stale withdrawal minted gold' }
+    $request.Action = 'Deposit'; $request.Amount = -1
+    $result = $transaction.Invoke($null, [object[]]@($account, $request, 1100, 1000000, 1000, [double]10))
+    if ($result.Message -eq 'accepted') { throw 'Negative deposit accepted' }
+    $request.Amount = 1200
+    if ($transaction.Invoke($null, [object[]]@($account, $request, 1100, 1000000, 1000, [double]10)).Message -eq 'accepted') { throw 'Unfunded deposit accepted' }
+    $request.Amount = 500
+    $result = $transaction.Invoke($null, [object[]]@($account, $request, 1100, 1000000, 1000, [double]10))
+    if ($account.Balance -ne 500 -or $result.GoldDelta -ne -500) { throw 'Personal deposit failed conservation' }
+    Add-Type -ReferencedAssemblies @((Join-Path $gameBin 'TaleWorlds.CampaignSystem.dll')) -TypeDefinition @'
+public sealed class BankSaveFixture : TaleWorlds.CampaignSystem.IDataStore {
+    public System.Collections.Generic.Dictionary<string, string> Data = new System.Collections.Generic.Dictionary<string, string>();
+    public bool Saving;
+    public bool IsSaving { get { return Saving; } }
+    public bool IsLoading { get { return !Saving; } }
+    public bool SyncData<T>(string key, ref T data) {
+        if (Saving) Data[key] = (string)(object)data;
+        else if (Data.ContainsKey(key)) data = (T)(object)Data[key];
+        return true;
+    }
+}
+'@
+    $personal = [Activator]::CreateInstance($bankBehavior, $true)
+    $accountFlags = [Reflection.BindingFlags]'Instance, NonPublic'
+    $accountsMethod = $bankBehavior.GetMethod('Accounts', $accountFlags)
+    $first = $accountsMethod.Invoke($personal, @('character-A'))
+    $second = $accountsMethod.Invoke($personal, @('character-B'))
+    $first.Add('town-A', $account)
+    $otherAccount = [Activator]::CreateInstance($accountType); $otherAccount.Open = $true; $otherAccount.Balance = 77
+    $second.Add('town-A', $otherAccount)
+    $journal = $bankBehavior.GetField('_results', $accountFlags).GetValue($personal)
+    $journal.Add('character-A/regression', $result)
+    $save = [BankSaveFixture]::new(); $save.Saving = $true
+    $personal.SyncData($save)
+    $reloaded = [Activator]::CreateInstance($bankBehavior, $true)
+    $save.Saving = $false; $reloaded.SyncData($save)
+    $a = $accountsMethod.Invoke($reloaded, @('character-A'))
+    $b = $accountsMethod.Invoke($reloaded, @('character-B'))
+    if ($a['town-A'].Balance -ne 500 -or $b['town-A'].Balance -ne 77 -or [object]::ReferenceEquals($a['town-A'], $b['town-A'])) { throw 'Personal bank accounts leaked across identities/save load' }
+    if (!$bankBehavior.GetField('_results', $accountFlags).GetValue($reloaded).ContainsKey('character-A/regression')) { throw 'Transaction receipt was lost on save/resync' }
+    $death = $fix.GetType('BannerlordTogetherCrashGuard.BattleDeathCompatibility')
+    $unexpected = [InvalidOperationException]::new('must propagate')
+    if (![object]::ReferenceEquals($unexpected, $death.GetMethod('FinalizeReplay', $flags).Invoke($null, @($unexpected)))) { throw 'Death guard swallowed an unrelated exception' }
+    $oldClient = [BannerlordTogether.CoopSession]::IsClient
+    $oldBattle = [BannerlordTogether.CoopSession]::InSpNativeBattle
+    try {
+        [BannerlordTogether.CoopSession]::IsClient = $true
+        [BannerlordTogether.CoopSession]::InSpNativeBattle = $true
+        if ($death.GetMethod('Before', $flags).Invoke($null, [object[]]@($null, $null))) { throw 'Missing death visuals still enter RegisterBlow' }
+        if ($null -ne $death.GetMethod('FinalizeReplay', $flags).Invoke($null, @([NullReferenceException]::new('replay')))) { throw 'Synthetic death null reference escaped' }
+        [BannerlordTogether.CoopSession]::InSpNativeBattle = $false
+        $outside = [NullReferenceException]::new('outside battle')
+        if (![object]::ReferenceEquals($outside, $death.GetMethod('FinalizeReplay', $flags).Invoke($null, @($outside)))) { throw 'Outside-battle null reference was swallowed' }
+    } finally {
+        [BannerlordTogether.CoopSession]::IsClient = $oldClient
+        [BannerlordTogether.CoopSession]::InSpNativeBattle = $oldBattle
+    }
+    $army = $fix.GetType('BannerlordTogetherCrashGuard.ClanArmyCompatibility')
+    if ($army.GetMethod('Available', $flags).Invoke($null, [object[]]@($null))) { throw 'Missing party can enter clan army' }
+    'Personal banking passed: funded debit/credit conservation, stale/negative rejection, zero-balance interest and isolated per-character save/load. Army/death hook bindings and unrelated-exception preservation passed.'
 
     $settings = $fix.GetType('BannerlordTogetherCrashGuard.HostSettingsCompatibility', $true)
     $bindings = $settings.GetField('Bindings', $flags).GetValue($null)

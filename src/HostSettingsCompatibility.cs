@@ -14,9 +14,10 @@ namespace BannerlordTogetherCrashGuard
         {
             internal string Id;
             internal Func<object> GetInstance;
+            internal bool AnnotatedOnly;
         }
 
-        private static readonly Binding[] Bindings =
+        private static readonly List<Binding> Bindings = new List<Binding>
         {
             new Binding { Id = "CampaignTweaks", GetInstance = () => StaticProperty("OffTheClock.CampaignTweaks.SubModule", "Current") },
             new Binding { Id = "ModularSmithing2", GetInstance = () => StaticProperty("ModularSmithing.Crafting.MSmithConfig", "Settings") },
@@ -31,9 +32,42 @@ namespace BannerlordTogetherCrashGuard
             new Dictionary<string, Tuple<object, MemberInfo, object>>(StringComparer.Ordinal);
         private static readonly HashSet<string> Failures = new HashSet<string>();
         private static readonly HashSet<object> Observed = new HashSet<object>();
+        private static bool _discovered;
+
+        private static void DiscoverMcm()
+        {
+            if (_discovered) return;
+            _discovered = true;
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (assembly.IsDynamic) continue;
+                Type[] types;
+                try { types = assembly.GetTypes(); }
+                catch (ReflectionTypeLoadException error) { types = error.Types.Where(type => type != null).ToArray(); }
+                foreach (Type type in types)
+                {
+                    if (type.IsAbstract || type.ContainsGenericParameters) continue;
+                    bool global = false;
+                    for (Type parent = type.BaseType; parent != null; parent = parent.BaseType)
+                        if (parent.IsGenericType && parent.GetGenericTypeDefinition().FullName == "MCM.Abstractions.Base.Global.GlobalSettings`1")
+                            global = true;
+                    if (!global) continue;
+                    var singleton = type.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+                    if (singleton == null || Bindings.Any(binding => InstanceType(binding) == type)) continue;
+                    Bindings.Add(new Binding { Id = "MCM:" + type.FullName, GetInstance = () => singleton.GetValue(null), AnnotatedOnly = true });
+                }
+            }
+        }
+
+        private static Type InstanceType(Binding binding)
+        {
+            try { return binding.GetInstance()?.GetType(); }
+            catch (Exception error) when (DeploymentCrashGuard.CanSuppress(error)) { return null; }
+        }
 
         internal static void InstallChangeHooks(Harmony harmony)
         {
+            DiscoverMcm();
             foreach (Binding binding in Bindings)
             {
                 try
@@ -43,7 +77,7 @@ namespace BannerlordTogetherCrashGuard
                     continue;
                 if (instance is INotifyPropertyChanged notifier && Observed.Add(instance))
                 {
-                    var members = Members(instance).ToDictionary(member => member.Name);
+                    var members = Members(instance, binding.AnnotatedOnly).ToDictionary(member => member.Name);
                     var values = members.ToDictionary(pair => pair.Key, pair => Read(instance, pair.Value));
                     notifier.PropertyChanged += (_, args) =>
                     {
@@ -63,7 +97,7 @@ namespace BannerlordTogetherCrashGuard
                         catch (Exception error) when (DeploymentCrashGuard.CanSuppress(error)) { Report(binding.Id, error); }
                     };
                 }
-                foreach (var property in Members(instance).OfType<PropertyInfo>())
+                foreach (var property in Members(instance, binding.AnnotatedOnly).OfType<PropertyInfo>())
                 {
                     MethodInfo setter = property.GetSetMethod(true);
                     if (setter != null && Harmony.GetPatchInfo(setter)?.Owners.Contains(SubModule.Owner) != true)
@@ -121,15 +155,16 @@ namespace BannerlordTogetherCrashGuard
                 type == typeof(double) || type == typeof(string) || type.IsEnum;
         }
 
-        private static IEnumerable<MemberInfo> Members(object instance)
+        private static IEnumerable<MemberInfo> Members(object instance, bool annotatedOnly = false)
         {
-            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             foreach (FieldInfo field in instance.GetType().GetFields(flags))
-                if (!field.IsInitOnly && !field.Name.Contains("<") && Supported(field.FieldType))
+                if (!annotatedOnly && !field.IsInitOnly && !field.Name.Contains("<") && Supported(field.FieldType))
                     yield return field;
             foreach (PropertyInfo property in instance.GetType().GetProperties(flags))
                 if (property.CanRead && property.CanWrite && property.GetIndexParameters().Length == 0 &&
-                    Supported(property.PropertyType))
+                    Supported(property.PropertyType) && (!annotatedOnly || property.GetCustomAttributes(true).Any(attribute =>
+                        attribute.GetType().Name.StartsWith("SettingProperty", StringComparison.Ordinal))))
                     yield return property;
         }
 
@@ -155,7 +190,7 @@ namespace BannerlordTogetherCrashGuard
                 object instance = binding.GetInstance();
                 if (instance == null)
                     continue;
-                foreach (MemberInfo member in Members(instance))
+                foreach (MemberInfo member in Members(instance, binding.AnnotatedOnly))
                 {
                     object value = Read(instance, member);
                     string text = Convert.ToString(value, CultureInfo.InvariantCulture);
@@ -177,7 +212,7 @@ namespace BannerlordTogetherCrashGuard
                 object instance = binding.GetInstance();
                 if (instance == null)
                     continue;
-                foreach (MemberInfo member in Members(instance))
+                foreach (MemberInfo member in Members(instance, binding.AnnotatedOnly))
                 {
                     string key = "setting/" + binding.Id + "/" + member.Name;
                     if (!values.TryGetValue(key, out string text))

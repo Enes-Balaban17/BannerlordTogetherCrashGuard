@@ -75,6 +75,8 @@ namespace BannerlordTogetherCrashGuard
             {
                 campaignStarter.AddBehavior(new CoopCompatibilityBehavior());
                 campaignStarter.AddBehavior(new CompanionEquipmentBehavior());
+                campaignStarter.AddBehavior(new PersonalBankCompatibility());
+                campaignStarter.AddBehavior(new ClanArmyCompatibility());
             }
         }
 
@@ -85,6 +87,8 @@ namespace BannerlordTogetherCrashGuard
                 CoopCompatibilityBehavior.Instance?.Tick(dt);
             if (_harmony != null)
                 CompanionEquipmentBehavior.Instance?.Tick();
+            if (_harmony != null)
+                ClanArmyCompatibility.Tick();
         }
 
         private static void CheckBuild(Assembly assembly, string expected)

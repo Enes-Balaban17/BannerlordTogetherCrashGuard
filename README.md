@@ -16,7 +16,14 @@
 
 ## What it fixes
 
-**v0.4.0 is a development build for coordinated co-op testing.** Compilation, patch bindings against the installed game/mod binaries and managed regression checks pass. The new adapters have not yet been verified in a live multiplayer session. Keep a separate backup of your campaign before testing.
+**v0.5.0 is a development build for coordinated co-op testing.** Compilation, patch bindings against the installed game/mod binaries and managed regression checks pass. The new adapters have not yet been verified in a live multiplayer session. Keep a separate backup of your campaign before testing.
+
+### New in v0.5.0
+
+- **Personal banking:** each authenticated co-op character has a separate account ledger saved by the host. The host validates deposits/withdrawals and applies each request once. Successful bank transactions pause the campaign and request BT save-resync; idle play does not schedule resyncs. Host native accounts are preserved. New client ledgers start empty because copied old client balances cannot be safely attributed. Client loan quests are not supported; native loans remain host-only.
+- **Clan and co-op armies:** press **Alt+A on the campaign map**, outside settlements/battles. Choose **Call my clan parties** to call an available NPC companion/family party without a kingdom; repeat to call others. Other humans use their own Alt+A menu to join, leave or disband their army. A distant joining player travels to the leader; choose **Merge with my army leader** once nearby. `btcg.army` is a console alternative. Player membership uses native BT authentication and networking. Independent same-clan armies do not spend kingdom influence or lose cohesion.
+- **Battle death protection:** invalid visual state skips BT's synthetic hit and lets its existing death fallback continue. A null reference in that replay method is contained and logged. This is targeted managed protection, not a guarantee against all battle or native-engine crashes.
+- **Settings:** in addition to explicit adapters, annotated scalar options from discovered MCM global settings are transferred on join, manual Sync and changes. Arbitrary non-MCM configs, complex dropdown/object settings and settings that require restarting a mod are not universally supported. Existing normal movement/battle packets continue at every speed.
 
 Full compatibility/setting refreshes are event-driven: player join, explicit native BT save-resync, or supported host setting changes. There is no periodic full/settings publish or periodic settings scan. Settings property notifications/setters and known config save/reload commands mark changes; unobservable direct edits to another mod's private fields require explicit Sync. A small connection check remains, and essential native movement/battle networking, daily finance and explicit equipment/character edits continue to deliver their own event packets.
 
@@ -24,7 +31,7 @@ NPC/crafted-item refreshes use editor/registration events and batched join/Sync 
 
 | New adapter | Implemented behavior |
 | --- | --- |
-| Xorberax's Legacy | Clears stale interest when a bank account is emptied. Existing camera protection remains. This does not merge every player's banking ledger. |
+| Xorberax's Legacy | Separate host-persisted personal ledgers for clients; authoritative account opening, deposits, withdrawals and closing, zero interest on an empty account, and transaction-triggered save-resync. Host native accounts/loans are preserved; client loan quests are blocked. Existing camera protection remains. |
 | BetterTime | Shares the host's fast-forward multiplier; client requests follow native time-control permission. Extra Fast requests native fast-forward mode and reports the accepted multiplier with a `[BT] Speed` message. |
 | Campaign Tweaks | Shares runtime settings and host companion/workshop limits in native shared-clan mode. |
 | Improved Garrisons | Shares global/settlement settings, training templates and host patrol/recruiter projections at join/Sync/settings refresh. No recurring projection snapshot loop. Host runs the simulation; full remote management commands are not implemented. |
@@ -67,11 +74,11 @@ The v0.2.4 camera hook was tested for binding with Xorberax’s Legacy **v1.0.8.
 
 ## Install
 
-**Recommended:** download `BannerlordTogetherCrashGuard-v0.4.0-Setup.exe` from [Releases](https://github.com/Enes-Balaban17/BannerlordTogetherCrashGuard/releases/latest), run it, and select the Bannerlord game folder. The installer includes the mod payload/license, automatically removes the installed module files' Windows download block (`Zone.Identifier`), and keeps a backup of an existing installation. No separate PowerShell or DLL-unblock step is needed. It only unblocks this mod's installed files; it does not change other mods or Windows security settings.
+**Recommended:** download `BannerlordTogetherCrashGuard-v0.5.0-Setup.exe` from [Releases](https://github.com/Enes-Balaban17/BannerlordTogetherCrashGuard/releases/latest), run it, and select the Bannerlord game folder. The installer includes the mod payload/license, automatically removes the installed module files' Windows download block (`Zone.Identifier`), and keeps a backup of an existing installation. No separate PowerShell or DLL-unblock step is needed. It only unblocks this mod's installed files; it does not change other mods or Windows security settings.
 
 1. Extract the release ZIP into the Bannerlord installation. The launcher manifest should be at `Modules\BannerlordTogetherCrashGuard\SubModule.xml`.
 2. In **Singleplayer → Mods**, enable **Bannerlord Together Crash Guard** below **BannerlordTogether**. Keep **BLT Deployment Crash Guard** disabled.
-3. Install **the same v0.4.0 build on the host and every client**, with the same optional mod versions and asset packs. Missing optional mods are skipped. Run the setup executable if you prefer installation without manual PowerShell commands.
+3. Install **the same v0.5.0 build on the host and every client**, with the same optional mod versions and asset packs. Missing optional mods are skipped. Run the setup executable if you prefer installation without manual PowerShell commands.
 4. If upgrading from **BLT Village Battle Fix**, remove the old copy from `Modules` and enable the new entry. Because the module ID changed in v0.2.3, an existing save may show the former module as missing. Starting with v0.3.0, compatibility identities and reward/projection bookkeeping are stored as campaign save data.
 
 For older dead encyclopedia duplicates, use the developer console to list exact IDs with `btcg.find_dead_heroes <name>`, then hide only the unwanted IDs with `btcg.hide_dead_heroes <id> [more ids]`. This hides entries and preserves the underlying save objects.
@@ -82,7 +89,7 @@ Open `%LOCALAPPDATA%\BannerlordTogetherCrashGuard\battle.log`.
 
 | Log entry | Meaning |
 | --- | --- |
-| `Loaded v0.4.0` | Harmony patches loaded |
+| `Loaded v0.5.0` | Harmony patches loaded |
 | `Inactive: Unsupported … SHA-256` | Installed binary differs from the supported build |
 | `[DEPLOY-GUARD] BROKEN_START_…` | Deployment exception was caught and spawn checks found a problem |
 | `[QUEST-RAID-EXIT] completed` | Mission cleanup returned. Check the quest result on the campaign map. |

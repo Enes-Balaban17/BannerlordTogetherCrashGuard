@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Linq;
 using System.Reflection;
 using BannerlordTogether;
@@ -13,9 +12,7 @@ namespace BannerlordTogetherCrashGuard
     {
         internal static void Apply(Harmony harmony)
         {
-            Hook(harmony, "XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior", "Withdraw", null, nameof(BankTransactionPostfix));
-            Hook(harmony, "XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior", "CloseBankAccountAtSettlement", null, nameof(BankTransactionPostfix));
-            Hook(harmony, "XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior", "UpdateBankData", nameof(BankTickPrefix), null);
+            Install("Personal banks", () => PersonalBankCompatibility.Install(harmony));
             Hook(harmony, "OffTheClock.CampaignTweaks.TweakClanTierModel", "GetCompanionLimit", null, nameof(CompanionLimitPostfix));
             Hook(harmony, "OffTheClock.CampaignTweaks.TweakWorkshopModel", "get_MaximumWorkshopsPlayerCanHave", null, nameof(WorkshopLimitPostfix));
             Hook(harmony, "TaleWorlds.CampaignSystem.GameComponents.DefaultClanTierModel", "GetCompanionLimit", null, nameof(CompanionLimitPostfix));
@@ -52,6 +49,8 @@ namespace BannerlordTogetherCrashGuard
             Install("Dismemberment", () => DismembermentCompatibility.Install(harmony));
             Install("Custom cultures and loadout", () => CultureCompatibility.Install(harmony));
             Install("Battle rewards", () => RewardShareCompatibility.Install(harmony));
+            Install("Battle death replay", () => BattleDeathCompatibility.Install(harmony));
+            Install("Clan and co-op armies", () => ClanArmyCompatibility.Install(harmony));
             Hook(harmony, "TogetherLordsCore.PeerSync.PacketDispatchPostfix", "Postfix", nameof(IgnoreOurExtensionInLordsPrefix), null);
         }
 
@@ -114,25 +113,6 @@ namespace BannerlordTogetherCrashGuard
                 __result = CoopCompatibilityBehavior.HostWorkshops;
         }
 
-        private static void BankTransactionPostfix(object __instance, Settlement settlement)
-        {
-            if (!CoopSession.IsActive)
-                return;
-            var getBank = AccessTools.Method(__instance.GetType(), "GetBankDataAtSettlement");
-            NormalizeEmptyBank(getBank.Invoke(__instance, new object[] { settlement }));
-        }
-
-        private static void BankTickPrefix(object __instance)
-        {
-            if (!CoopSession.IsActive)
-                return;
-            var banks = AccessTools.Field(__instance.GetType(), "_settlementBankDataBySettlementId").GetValue(__instance) as IDictionary;
-            if (banks == null)
-                return;
-            foreach (object bank in banks.Values)
-                NormalizeEmptyBank(bank);
-        }
-
         internal static void NormalizeEmptyBank(object bank)
         {
             if (bank == null)
@@ -145,7 +125,6 @@ namespace BannerlordTogetherCrashGuard
             if ((float)interest.GetValue(bank) == 0f)
                 return;
             interest.SetValue(bank, 0f);
-            BattleLog.Write("[BANK] cleared stale interest after account was emptied");
         }
 
         private static void HeroBodyPostfix(CharacterObject character)
