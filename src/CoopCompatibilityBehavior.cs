@@ -159,6 +159,7 @@ namespace BannerlordTogetherCrashGuard
             CultureCompatibility.LocalCharacterId = null;
             ClanIncomeCompatibility.PlayerCount = 1;
             ClanIncomeCompatibility.ShareIndex = 0;
+            SharedAssetIncome.Reset();
             _timer = 0;
             _kingdomDirty = true;
             _financeDirty = true;
@@ -252,6 +253,8 @@ namespace BannerlordTogetherCrashGuard
                     ClanIncomeCompatibility.HostIncome = float.Parse(income, CultureInfo.InvariantCulture);
                 if (message.Values.TryGetValue("income-index", out string incomeIndex))
                     ClanIncomeCompatibility.ShareIndex = int.Parse(incomeIndex, CultureInfo.InvariantCulture);
+                if (message.Values.TryGetValue("garrison-expense", out string garrisonExpense))
+                    ClanIncomeCompatibility.HostGarrisonExpense = float.Parse(garrisonExpense, CultureInfo.InvariantCulture);
                 if (message.Values.TryGetValue("players", out string players))
                     ClanIncomeCompatibility.PlayerCount = int.Parse(players, CultureInfo.InvariantCulture);
                 if (message.Values.TryGetValue("speed", out string speedText))
@@ -294,6 +297,7 @@ namespace BannerlordTogetherCrashGuard
                     _financeDirty = false;
                 }
                 values["income"] = ClanIncomeCompatibility.HostIncome.ToString("R", CultureInfo.InvariantCulture);
+                values["garrison-expense"] = ClanIncomeCompatibility.HostGarrisonExpense.ToString("R", CultureInfo.InvariantCulture);
             }
             return values;
         }
@@ -395,6 +399,11 @@ namespace BannerlordTogetherCrashGuard
                 _kingdomDirty = true;
         }
 
+        internal void MarkFinanceChanged()
+        {
+            _financeDirty = true;
+        }
+
         internal void PublishChanges(Dictionary<string, string> values)
         {
             if (CoopSession.IsHost)
@@ -419,6 +428,8 @@ namespace BannerlordTogetherCrashGuard
 
         internal bool IsCompatiblePeer(int peer) => _peers.ContainsKey(peer) &&
             CoopSession.Server?.GameplayPeerIds.Contains(peer) == true;
+
+        internal int[] CompatiblePeers() => _peers.Keys.Where(IsCompatiblePeer).ToArray();
 
         internal void RequestSpeed(float speed)
         {

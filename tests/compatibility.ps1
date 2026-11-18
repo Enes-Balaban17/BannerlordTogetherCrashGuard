@@ -86,6 +86,10 @@ try {
         'TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel.CalculateClanIncomeInternal',
         'TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel.AddPartyExpense',
         'TaleWorlds.CampaignSystem.CampaignBehaviors.ClanVariablesCampaignBehavior.DailyTickClan',
+        'TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel.CalculateClanExpensesInternal',
+        'TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel.AddIncomeFromParty',
+        'BannerlordTogether.ClientCaravanCreationBehavior.HasDailyFinanceDeltaSent',
+        'TaleWorlds.CampaignSystem.Settlements.Workshops.Workshop.ChangeOwnerOfWorkshop',
         'TaleWorlds.CampaignSystem.Actions.DeclareWarAction.ApplyInternal',
         'TaleWorlds.CampaignSystem.Actions.MakePeaceAction.Apply',
         'Diplomacy.Messengers.MessengerManager.StartDialogue',
@@ -234,6 +238,18 @@ public static class ConservationFixture
         }
     }
 }
+public sealed class AssetWalletFixture
+{
+    public int Balance;
+    public int Withdrawals;
+    public int Collect(bool withdraw)
+    {
+        int amount = Balance;
+        if (withdraw) { Balance = 0; Withdrawals++; }
+        return amount;
+    }
+    public System.Func<bool, int> Callback() { return Collect; }
+}
 '@
     $normalize = $optional.GetMethod('NormalizeEmptyBank', $flags)
     $bank = [BankFixture]::new()
@@ -287,6 +303,49 @@ public static class ConservationFixture
     $dailyCalls = @($dailyRewrite | Where-Object { $_.operand -is [Reflection.MethodInfo] -and $_.operand.Name -eq 'PayDailyGold' })
     if ($dailyCalls.Count -ne 1) { throw 'Daily gold must be routed once without duplicate payment' }
     'Native daily finance routing passed: exactly one existing gold transfer is replaced.'
+
+    $ledgerType = $fix.GetType('BannerlordTogetherCrashGuard.IncomeAssetLedger', $true)
+    $ledger = [Activator]::CreateInstance($ledgerType, $true)
+    $ledgerFlags = [Reflection.BindingFlags]'Instance, NonPublic'
+    $addAsset = $ledgerType.GetMethod('Add', $ledgerFlags)
+    $collectAssets = $ledgerType.GetMethod('Collect', $ledgerFlags)
+    $hostShop = [AssetWalletFixture]::new(); $hostShop.Balance = 300
+    $clientShop = [AssetWalletFixture]::new(); $clientShop.Balance = 500
+    $clientCaravan = [AssetWalletFixture]::new(); $clientCaravan.Balance = 700
+    $duplicateProjection = [AssetWalletFixture]::new(); $duplicateProjection.Balance = 500
+    $addAsset.Invoke($ledger, [object[]]@('workshop/town-1/0', $hostShop.Callback()))
+    $addAsset.Invoke($ledger, [object[]]@('workshop/town-2/1', $clientShop.Callback()))
+    $addAsset.Invoke($ledger, [object[]]@('caravan/peer-caravan-1', $clientCaravan.Callback()))
+    $addAsset.Invoke($ledger, [object[]]@('workshop/town-2/1', $duplicateProjection.Callback()))
+    if ($collectAssets.Invoke($ledger, [object[]]@($false)) -ne 1500) { throw 'Combined human assets or canonical deduplication failed' }
+    if ($hostShop.Withdrawals + $clientShop.Withdrawals + $clientCaravan.Withdrawals -ne 0) { throw 'Preview withdrew asset funds' }
+    if ($collectAssets.Invoke($ledger, [object[]]@($true)) -ne 1500) { throw 'Actual pooled asset collection differs from preview' }
+    if ($hostShop.Withdrawals -ne 1 -or $clientShop.Withdrawals -ne 1 -or $clientCaravan.Withdrawals -ne 1 -or $duplicateProjection.Withdrawals -ne 0) { throw 'An asset was collected twice or an owner was missed' }
+    if ($hostShop.Balance + $clientShop.Balance + $clientCaravan.Balance -ne 0) { throw 'Wallet withdrawals were not conserved' }
+
+    $expenseCall = $finance.GetNestedType('ExpenseCall', [Reflection.BindingFlags]'NonPublic')
+    $expenseState = [Activator]::CreateInstance($expenseCall, $true)
+    $expenseCall.GetField('Garrison', [Reflection.BindingFlags]'Instance, NonPublic').SetValue($expenseState, [single]2000)
+    $finance.GetField('PlayerCount', $flags).SetValue($null, 2)
+    $expensePostfix = $finance.GetMethod('ExpensesPostfix', $flags)
+    $previousHost = [BannerlordTogether.CoopSession]::IsHost
+    try {
+        [BannerlordTogether.CoopSession]::IsHost = $true
+        $expenseArgs = [object[]]@([TaleWorlds.CampaignSystem.ExplainedNumber]::new([single]1800, $false, $null), $false, $expenseState)
+        $expensePostfix.Invoke($null, $expenseArgs)
+        if ($expenseArgs[0].ResultNumber -ne 800) { throw 'Host shared garrison expense or personal expense accounting is wrong' }
+        [BannerlordTogether.CoopSession]::IsHost = $false
+        $finance.GetField('ShareIndex', $flags).SetValue($null, 1)
+        $clientExpenseState = [Activator]::CreateInstance($expenseCall, $true)
+        $expenseArgs = [object[]]@([TaleWorlds.CampaignSystem.ExplainedNumber]::new([single]1600, $false, $null), $false, $clientExpenseState)
+        $expensePostfix.Invoke($null, $expenseArgs)
+        if ($expenseArgs[0].ResultNumber -ne 600) { throw 'Client did not use the same host garrison total' }
+    } finally {
+        [BannerlordTogether.CoopSession]::IsHost = $previousHost
+        $finance.GetField('PlayerCount', $flags).SetValue($null, 1)
+        $finance.GetField('ShareIndex', $flags).SetValue($null, 0)
+    }
+    'Shared assets passed: host/client workshops and caravans, canonical deduplication, preview without withdrawal, one collection per asset, shared garrison totals and separate personal expenses.'
 
     $settings = $fix.GetType('BannerlordTogetherCrashGuard.HostSettingsCompatibility', $true)
     $bindings = $settings.GetField('Bindings', $flags).GetValue($null)

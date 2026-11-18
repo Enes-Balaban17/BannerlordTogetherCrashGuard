@@ -15,13 +15,21 @@ namespace BannerlordTogetherCrashGuard
     internal static class ClanIncomeCompatibility
     {
         internal static float HostIncome;
+        internal static float HostGarrisonExpense;
         internal static int PlayerCount = 1;
         internal static int ShareIndex;
         [ThreadStatic] private static bool _rawPreview;
+        private static bool Pooling => CoopSession.IsHost && PlayerCount > 1 && SharedMode();
         private sealed class IncomeCall
         {
             internal float Before;
             internal bool ClientHandled;
+        }
+        [ThreadStatic] private static ExpenseCall _expense;
+        private sealed class ExpenseCall
+        {
+            internal ExpenseCall Previous;
+            internal float Garrison;
         }
 
         internal static bool SharedMode()
@@ -49,10 +57,22 @@ namespace BannerlordTogetherCrashGuard
                     new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(IncomePostfix)));
             var expense = AccessTools.Method(typeof(DefaultClanFinanceModel), "AddPartyExpense");
             if (Harmony.GetPatchInfo(expense)?.Owners.Contains(SubModule.Owner) != true)
-                harmony.Patch(expense, postfix: new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(GarrisonExpensePostfix)));
+                harmony.Patch(expense, new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(GarrisonExpensePrefix)),
+                    new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(GarrisonExpensePostfix)));
+            var expenses = AccessTools.Method(typeof(DefaultClanFinanceModel), "CalculateClanExpensesInternal");
+            if (Harmony.GetPatchInfo(expenses)?.Owners.Contains(SubModule.Owner) != true)
+                harmony.Patch(expenses, new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(ExpensesPrefix)),
+                    new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(ExpensesPostfix)),
+                    finalizer: new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(ExpensesFinalizer)));
             var daily = AccessTools.Method(typeof(ClanVariablesCampaignBehavior), "DailyTickClan");
             if (Harmony.GetPatchInfo(daily)?.Owners.Contains(SubModule.Owner) != true)
                 harmony.Patch(daily, transpiler: new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(RouteDailyPayment)));
+            var partyIncome = AccessTools.Method(typeof(DefaultClanFinanceModel), "AddIncomeFromParty");
+            if (Harmony.GetPatchInfo(partyIncome)?.Owners.Contains(SubModule.Owner) != true)
+                harmony.Patch(partyIncome, new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(PooledCaravanIncomePrefix)));
+            var fallback = AccessTools.Method(typeof(ClientCaravanCreationBehavior), "HasDailyFinanceDeltaSent");
+            if (Harmony.GetPatchInfo(fallback)?.Owners.Contains(SubModule.Owner) != true)
+                harmony.Patch(fallback, new HarmonyMethod(typeof(ClanIncomeCompatibility), nameof(CaravanFallbackPrefix)));
         }
 
         private static bool OriginalSplitPrefix() => !Enabled;
@@ -73,7 +93,18 @@ namespace BannerlordTogetherCrashGuard
             try
             {
                 _rawPreview = true;
+                SharedAssetIncome.Prepare();
                 HostIncome = Campaign.Current.Models.ClanFinanceModel.CalculateClanIncome(Clan.PlayerClan, false, false, false).ResultNumber;
+                HostIncome += SharedAssetIncome.CollectAdditional(false);
+                HostGarrisonExpense = 0;
+                object model = Campaign.Current.Models.ClanFinanceModel;
+                MethodInfo expense = AccessTools.Method(typeof(DefaultClanFinanceModel), "AddPartyExpense");
+                foreach (var fief in Clan.PlayerClan.Fiefs)
+                    if (fief.GarrisonParty?.IsActive == true)
+                    {
+                        object[] args = { fief.GarrisonParty, Clan.PlayerClan, new ExplainedNumber(HostIncome), false };
+                        HostGarrisonExpense += Math.Max(0, -(int)expense.Invoke(model, args));
+                    }
             }
             finally { _rawPreview = false; }
         }
@@ -85,7 +116,10 @@ namespace BannerlordTogetherCrashGuard
                 return true;
             __state = new IncomeCall { Before = goldChange.ResultNumber, ClientHandled = CoopSession.IsClient };
             if (!__state.ClientHandled)
+            {
+                SharedAssetIncome.Prepare();
                 return true;
+            }
             goldChange.Add(GrossShare(HostIncome, PlayerCount, Math.Min(ShareIndex, PlayerCount - 1)),
                 new TextObject("Crash Guard shared clan income (" + PlayerCount + " players)"));
             if (applyWithdrawals)
@@ -98,6 +132,8 @@ namespace BannerlordTogetherCrashGuard
         {
             if (__state == null || __state.ClientHandled)
                 return;
+            float extra = SharedAssetIncome.CollectAdditional(applyWithdrawals);
+            goldChange.Add(extra, new TextObject("Co-op player workshop and caravan income"));
             float actualIncome = goldChange.ResultNumber - __state.Before;
             HostIncome = actualIncome;
             int share = GrossShare(actualIncome, PlayerCount, 0);
@@ -113,8 +149,61 @@ namespace BannerlordTogetherCrashGuard
 
         private static void GarrisonExpensePostfix(TaleWorlds.CampaignSystem.Party.MobileParty party, Clan clan, ref int __result)
         {
-            if (Enabled && clan == Clan.PlayerClan && party?.IsGarrison == true && __result < 0)
-                __result = -GrossShare(-__result, PlayerCount, CoopSession.IsHost ? 0 : Math.Min(ShareIndex, PlayerCount - 1));
+            if (!_rawPreview && _expense != null && clan == Clan.PlayerClan && party?.IsGarrison == true)
+            {
+                _expense.Garrison += Math.Max(0, -__result);
+                __result = 0;
+            }
+        }
+
+        private static bool GarrisonExpensePrefix(TaleWorlds.CampaignSystem.Party.MobileParty party, Clan clan, ref int __result)
+        {
+            if (_expense == null || !CoopSession.IsClient || clan != Clan.PlayerClan || party?.IsGarrison != true)
+                return true;
+            __result = 0;
+            return false;
+        }
+
+        private static void ExpensesPrefix(Clan clan, out ExpenseCall __state)
+        {
+            __state = null;
+            if (Enabled && clan == Clan.PlayerClan)
+                _expense = __state = new ExpenseCall { Previous = _expense };
+        }
+
+        private static void ExpensesPostfix(ref ExplainedNumber goldChange, bool applyWithdrawals, ExpenseCall __state)
+        {
+            if (__state == null)
+                return;
+            if (CoopSession.IsHost)
+                HostGarrisonExpense = __state.Garrison;
+            int share = GrossShare(HostGarrisonExpense, PlayerCount, CoopSession.IsHost ? 0 : Math.Min(ShareIndex, PlayerCount - 1));
+            goldChange.Add(-share, new TextObject("Crash Guard shared garrison expenses (" + PlayerCount + " players)"));
+            if (applyWithdrawals && CoopSession.IsHost)
+                CoopCompatibilityBehavior.Instance?.PublishChanges(new Dictionary<string, string>
+                    { ["garrison-expense"] = HostGarrisonExpense.ToString("R", System.Globalization.CultureInfo.InvariantCulture) });
+        }
+
+        private static void ExpensesFinalizer(ExpenseCall __state)
+        {
+            if (__state != null)
+                _expense = __state.Previous;
+        }
+
+        private static bool PooledCaravanIncomePrefix(TaleWorlds.CampaignSystem.Party.MobileParty party, ref int __result)
+        {
+            if (!Pooling || !SharedAssetIncome.Contains(party))
+                return true;
+            __result = 0;
+            return false;
+        }
+
+        private static bool CaravanFallbackPrefix(ulong syncId, string kind, ref bool __result)
+        {
+            if (!Pooling || kind != "income" || !SharedAssetIncome.Contains(syncId))
+                return true;
+            __result = true;
+            return false;
         }
 
         private static IEnumerable<CodeInstruction> RouteDailyPayment(IEnumerable<CodeInstruction> instructions)

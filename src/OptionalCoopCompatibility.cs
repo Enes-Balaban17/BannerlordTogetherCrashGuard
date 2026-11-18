@@ -29,6 +29,7 @@ namespace BannerlordTogetherCrashGuard
             Hook(harmony, "BannerlordTogether.CoopCampaignBehavior", "PrepareGameplayPeerForIsolatedResync", null, nameof(PeerResyncPrepared));
             Hook(harmony, "TaleWorlds.CampaignSystem.Actions.DeclareWarAction", "ApplyInternal", null, nameof(KingdomChanged));
             Hook(harmony, "TaleWorlds.CampaignSystem.Actions.MakePeaceAction", "Apply", null, nameof(KingdomChanged));
+            Hook(harmony, "TaleWorlds.CampaignSystem.Settlements.Workshops.Workshop", "ChangeOwnerOfWorkshop", null, nameof(FinanceChanged));
             Hook(harmony, "Diplomacy.CampaignBehaviors.CivilWarBehavior", "DailyTick", nameof(AuthorityPrefix), null);
             Hook(harmony, "Diplomacy.CampaignBehaviors.CivilWarBehavior", "DailyTickClan", nameof(AuthorityPrefix), null);
             Hook(harmony, "Diplomacy.CampaignBehaviors.DiplomaticAgreementBehavior", "UpdateDiplomaticAgreements", nameof(AuthorityPrefix), null);
@@ -186,6 +187,11 @@ namespace BannerlordTogetherCrashGuard
         private static void KingdomChanged()
         {
             CoopCompatibilityBehavior.Instance?.MarkKingdomChanged();
+        }
+
+        private static void FinanceChanged()
+        {
+            CoopCompatibilityBehavior.Instance?.MarkFinanceChanged();
         }
     }
 }

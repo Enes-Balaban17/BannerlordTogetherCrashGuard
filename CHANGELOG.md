@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.3 — pool both players' assets and shared garrison expenses
+
+- Included connected co-op owners' workshops and caravans in the host gross-income calculation, instead of relying on the base model's clan-leader-only workshop collection.
+- Preserved settlement taxes and passive trade-agreement/tribute income already returned by the active finance model. Incoming tribute uses the clan's normal entitlement, not the full kingdom wallet.
+- Collected human-owned caravan profit once at the host, suppressed duplicate native per-clan caravan income and marked pooled caravan income as handled for BT's separate owner-payment fallback. Owner-specific caravan operating expenses retain their native route.
+- Deduplicated supplemental assets by canonical workshop location/index or caravan party ID. Forecasts do not withdraw funds; actual collection withdraws each supplemental asset once.
+- Distributed the host's total common garrison funding debit instead of independently recomputing and dividing different client-side garrison wallets. Personal party expenses remain separate.
+- Refreshed the preview after workshop ownership changes. Added pooled-owner/asset diagnostics to the daily income log.
+
+Formula: each human's daily net is `gross common income / connected humans - common garrison funding / connected humans - that human's remaining local expenses`, with conserved integer remainders. NPC relatives and companions are not recipients. The gross common income includes both players' eligible assets.
+
+Validation: 52 actual game/mod bindings and core smoke checks, existing finance/reward regressions, supplemental asset preview/withdrawal and duplicate-key tests, and host/client garrison-total tests. Live co-op testing with independently purchased workshops/caravans and diplomacy receipts is still required. This build retains the v0.3.2 recurring-work reductions.
+
 ## v0.3.2 — reduce recurring work and correct income calculation
 
 - Removed periodic all-NPC appearance scans and complete crafted-item scans. Editor saves and crafted-item registration publish changes; join/Sync still sends full state.

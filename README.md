@@ -16,7 +16,7 @@
 
 ## What it fixes
 
-**v0.3.2 is a development build for coordinated co-op testing.** Compilation, patch bindings against the installed game/mod binaries and managed regression checks pass. The new adapters have not yet been verified in a live multiplayer session. Keep a separate backup of your campaign before testing.
+**v0.3.3 is a development build for coordinated co-op testing.** Compilation, patch bindings against the installed game/mod binaries and managed regression checks pass. The new adapters have not yet been verified in a live multiplayer session. Keep a separate backup of your campaign before testing.
 
 Settings are sent when a player joins, after the native BT save-resync flow, or when the host changes a supported value. A local comparison still runs periodically to detect edits made by mods without change events; unchanged values produce no compatibility state packets. Patrol positions, income and other changing world state remain eligible for updates.
 
@@ -39,7 +39,7 @@ Additional development features:
 
 - **Village battle transitions:** extends deployment/teardown tracking to village encounters and holds campaign simulation casualties while a linked player battle is pending. Intentional autoresolve remains available.
 - **Battle rewards:** divides the host's newly earned items, gold and ordinary prisoners among compatible participating players through Bannerlord Together's native reward flow. A captured lord uses the existing hero object and one assigned recipient; no hero copies are created. Disconnection, ransom, escape and multi-lord battles still need live testing.
-- **Shared clan income:** divides the actual host income contribution before expense calculation, without recomputing depleted asset wallets after withdrawal. Clients use the host income snapshot instead of independently withdrawing the same assets. Native daily payment targets the local human player on a shared-clan client. Common garrison funding debits are shared; individual party and other expenses remain local, so net gold can still differ or be negative. This assumes all participants share the host clan. Daily timing and positive/negative balances still require live verification.
+- **Shared clan income:** pools the clan's settlement income, connected humans' workshops and caravans, and passive trade-agreement/tribute receipts already provided by the active clan finance model. Tribute means the clan's normal share, not the entire kingdom treasury. Both host-owned and client-owned assets contribute. Canonical workshop and caravan IDs prevent duplicate collection, and pooled caravans do not also receive BT's private owner income payout. The common gross pool and host-authoritative garrison funding total are divided among connected compatible humans. Personal party and other local expenses remain separate, so net gold can differ or be negative. Native daily payment targets the local human on a shared-clan client. This assumes all participants share the host clan; owner projection, daily timing and balance replay still require live verification.
 - **Encyclopedia:** hides dead co-op projection heroes identified during despawn or by exact native log evidence. Real heroes are retained, not deleted. Old copies without log evidence require explicit identification.
 
 The messenger adapter addresses unsafe conversation entry conditions; it is not proof that every reported native freeze or crash has been resolved. Include a fresh crash report if it reproduces.
@@ -63,11 +63,11 @@ The v0.2.4 camera hook was tested for binding with Xorberax’s Legacy **v1.0.8.
 
 ## Install
 
-**Recommended:** download `BannerlordTogetherCrashGuard-v0.3.2-Setup.exe` from [Releases](https://github.com/Enes-Balaban17/BannerlordTogetherCrashGuard/releases/latest), run it, and select the Bannerlord game folder. The installer includes the mod payload, automatically removes the installed module files' Windows download block (`Zone.Identifier`), and keeps a backup of an existing installation. No separate PowerShell or DLL-unblock step is needed. It only unblocks this mod's installed files; it does not change other mods or Windows security settings.
+**Recommended:** download `BannerlordTogetherCrashGuard-v0.3.3-Setup.exe` from [Releases](https://github.com/Enes-Balaban17/BannerlordTogetherCrashGuard/releases/latest), run it, and select the Bannerlord game folder. The installer includes the mod payload, automatically removes the installed module files' Windows download block (`Zone.Identifier`), and keeps a backup of an existing installation. No separate PowerShell or DLL-unblock step is needed. It only unblocks this mod's installed files; it does not change other mods or Windows security settings.
 
 1. Extract the release ZIP into the Bannerlord installation. The launcher manifest should be at `Modules\BannerlordTogetherCrashGuard\SubModule.xml`.
 2. In **Singleplayer → Mods**, enable **Bannerlord Together Crash Guard** below **BannerlordTogether**. Keep **BLT Deployment Crash Guard** disabled.
-3. Install **the same v0.3.2 build on the host and every client**, with the same optional mod versions and asset packs. Missing optional mods are skipped. Run the setup executable if you prefer installation without manual PowerShell commands.
+3. Install **the same v0.3.3 build on the host and every client**, with the same optional mod versions and asset packs. Missing optional mods are skipped. Run the setup executable if you prefer installation without manual PowerShell commands.
 4. If upgrading from **BLT Village Battle Fix**, remove the old copy from `Modules` and enable the new entry. Because the module ID changed in v0.2.3, an existing save may show the former module as missing. Starting with v0.3.0, compatibility identities and reward/projection bookkeeping are stored as campaign save data.
 
 For older dead encyclopedia duplicates, use the developer console to list exact IDs with `btcg.find_dead_heroes <name>`, then hide only the unwanted IDs with `btcg.hide_dead_heroes <id> [more ids]`. This hides entries and preserves the underlying save objects.
@@ -78,7 +78,7 @@ Open `%LOCALAPPDATA%\BannerlordTogetherCrashGuard\battle.log`.
 
 | Log entry | Meaning |
 | --- | --- |
-| `Loaded v0.3.2` | Harmony patches loaded |
+| `Loaded v0.3.3` | Harmony patches loaded |
 | `Inactive: Unsupported … SHA-256` | Installed binary differs from the supported build |
 | `[DEPLOY-GUARD] BROKEN_START_…` | Deployment exception was caught and spawn checks found a problem |
 | `[QUEST-RAID-EXIT] completed` | Mission cleanup returned. Check the quest result on the campaign map. |
