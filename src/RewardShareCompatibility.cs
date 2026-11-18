@@ -222,6 +222,7 @@ namespace BannerlordTogetherCrashGuard
             }
             BattleLog.Write("[LOOT-SHARE] conserved host reward pool battle=" + original.BattleId +
                 " participants=" + count + " gold=" + goldGain + " uniqueLords=" + lordTransfers.Count);
+            CoopCompatibilityBehavior.Instance?.MarkRuntimeChanged();
             return false;
         }
 
@@ -455,12 +456,23 @@ namespace BannerlordTogetherCrashGuard
                 if (hero?.IsPrisoner == true)
                     EndCaptivityAction.ApplyByReleasedAfterBattle(hero);
                 Lords[id] = "";
+                CoopCompatibilityBehavior.Instance?.MarkRuntimeChanged();
             }
         }
 
         internal static void BeginCampaign()
         {
             Lords.Clear(); Actors.Clear(); Pending.Clear(); AppliedLords.Clear(); ReleasePending.Clear();
+        }
+
+        internal static void PrisonerReleased(Hero prisoner)
+        {
+            if (CoopSession.IsHost && prisoner != null && !prisoner.IsPrisoner &&
+                Lords.TryGetValue(prisoner.StringId, out string owner) && !string.IsNullOrEmpty(owner))
+            {
+                Lords[prisoner.StringId] = "";
+                CoopCompatibilityBehavior.Instance?.MarkRuntimeChanged();
+            }
         }
 
         internal static void SyncData(IDataStore store)

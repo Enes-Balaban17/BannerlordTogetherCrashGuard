@@ -15,6 +15,8 @@ try {
         $archive.GetEntry("Modules/$module/SubModule.xml"), (Join-Path $payload 'SubModule.xml'))
     [IO.Compression.ZipFileExtensions]::ExtractToFile(
         $archive.GetEntry("Modules/$module/bin/Win64_Shipping_Client/$module.dll"), (Join-Path $payload "$module.dll"))
+    [IO.Compression.ZipFileExtensions]::ExtractToFile(
+        $archive.GetEntry("Modules/$module/CompanionManagementSuite-LICENSE.txt"), (Join-Path $payload 'CompanionManagementSuite-LICENSE.txt'))
 } finally {
     $archive.Dispose()
 }

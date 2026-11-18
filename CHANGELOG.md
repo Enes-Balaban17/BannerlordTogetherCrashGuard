@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.0 — event-driven refreshes, clan lifecycle, Extra Fast and companion gear
+
+- Removed timed full/settings publishing and periodic settings comparisons. Supported scalar setters/property notifications and config save/reload commands trigger a debounced refresh. Known field-only configs need their Save/Reload command or explicit Sync. Idle ticks now only check connection membership; normal native movement/battle and small gameplay event packets remain.
+- Removed extra full kingdom refreshes on routine war/peace events; native BT relation networking continues. Explicit Sync still requests a full reconciliation. Failed state sends do not schedule automatic full-snapshot retries.
+- Preserved event-driven lord custody/release notifications after removing the periodic publisher.
+- Guarded reserved BT projection clans and living human-player clans against erroneous destruction; filtered their false extinction notifications. Genuine NPC and single-player notifications are preserved. Actual captivity replay is pending.
+- Connected accepted BetterTime Extra Fast multiplier changes to native fast-forward control and added a multiplier notification on host/clients. Native client time-control permission still applies.
+- Added host-controlled, queued companion equipment upgrades for autonomous NPC party leaders from human players' clans. Uses real party inventory or town stock; displaced items return to the party. Checks skills/sex restrictions, preserves weapon/ammo and mount families, prefers culture-compatible gear, and leaves player gear/civilian gear/banners alone.
+- Market spending uses the companion's own funds: at most 10% per daily attempt, up to 20,000, with a 1,000 reserve and two-purchase limit. Daily attempts and the host on/off switch persist through saves. Equipment IDs/modifiers are relayed through existing NPC state updates.
+- Adapted three engine-free item ranking files from CompanionManagementSuite under MIT; included upstream copyright/license in source, ZIP and installer.
+
+Validation includes the actual compatibility tick with a logical 40-second idle run producing zero publishes, then one setting edit and one explicit Sync producing one publish each; synthetic-clan destruction/notification guards; genuine NPC and single-player notification preservation; companion budget/upgrade-ranking checks; and prior finance/reward regressions. Live frame-time, captivity, Extra Fast and remote companion inventory/payment checks are still required. No game was launched for automated validation.
+
 ## v0.3.3 — pool both players' assets and shared garrison expenses
 
 - Included connected co-op owners' workshops and caravans in the host gross-income calculation, instead of relying on the base model's clan-leader-only workshop collection.

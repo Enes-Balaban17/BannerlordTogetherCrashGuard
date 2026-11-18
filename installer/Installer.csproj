@@ -13,5 +13,6 @@
     <Reference Include="System.Windows.Forms" />
     <EmbeddedResource Include="$(PayloadDir)\SubModule.xml" LogicalName="SubModule.xml" />
     <EmbeddedResource Include="$(PayloadDir)\BannerlordTogetherCrashGuard.dll" LogicalName="BannerlordTogetherCrashGuard.dll" />
+    <EmbeddedResource Include="$(PayloadDir)\CompanionManagementSuite-LICENSE.txt" LogicalName="CompanionManagementSuite-LICENSE.txt" />
   </ItemGroup>
 </Project>

@@ -16,21 +16,21 @@
 
 ## What it fixes
 
-**v0.3.3 is a development build for coordinated co-op testing.** Compilation, patch bindings against the installed game/mod binaries and managed regression checks pass. The new adapters have not yet been verified in a live multiplayer session. Keep a separate backup of your campaign before testing.
+**v0.4.0 is a development build for coordinated co-op testing.** Compilation, patch bindings against the installed game/mod binaries and managed regression checks pass. The new adapters have not yet been verified in a live multiplayer session. Keep a separate backup of your campaign before testing.
 
-Settings are sent when a player joins, after the native BT save-resync flow, or when the host changes a supported value. A local comparison still runs periodically to detect edits made by mods without change events; unchanged values produce no compatibility state packets. Patrol positions, income and other changing world state remain eligible for updates.
+Full compatibility/setting refreshes are event-driven: player join, explicit native BT save-resync, or supported host setting changes. There is no periodic full/settings publish or periodic settings scan. Settings property notifications/setters and known config save/reload commands mark changes; unobservable direct edits to another mod's private fields require explicit Sync. A small connection check remains, and essential native movement/battle networking, daily finance and explicit equipment/character edits continue to deliver their own event packets.
 
-Since v0.3.2, periodic updates no longer scan every NPC's appearance or serialize all crafted item definitions. Editor saves and crafted-item registration trigger updates. Full NPC refreshes on join/Sync are processed in small batches across frames. Additional native kingdom reconciliation follows war/peace changes or an explicit Sync instead of a periodic full refresh.
+NPC/crafted-item refreshes use editor/registration events and batched join/Sync snapshots. Additional full kingdom reconciliation runs only on explicit Sync. This removes this mod's recurring snapshot work; it does not disable Bannerlord Together's necessary world/battle networking or guarantee that all game stalls are fixed.
 
 | New adapter | Implemented behavior |
 | --- | --- |
 | Xorberax's Legacy | Clears stale interest when a bank account is emptied. Existing camera protection remains. This does not merge every player's banking ledger. |
-| BetterTime | Shares the host's fast-forward multiplier; client multiplier requests follow Bannerlord Together's client time-control permission. |
+| BetterTime | Shares the host's fast-forward multiplier; client requests follow native time-control permission. Extra Fast requests native fast-forward mode and reports the accepted multiplier with a `[BT] Speed` message. |
 | Campaign Tweaks | Shares runtime settings and host companion/workshop limits in native shared-clan mode. |
-| Improved Garrisons | Shares global and settlement settings, training templates, and host patrol/recruiter positions and nonhero rosters. Host runs the simulation; remote map parties are projections. Full remote management commands are not implemented. |
-| Diplomacy | Periodically reconciles native kingdom relations and suppresses duplicate client-side daily diplomacy simulation. Guards settlement valuation when faction geography is missing and excludes unavailable buyers from corruption-related fief transfers. Remote messenger conversations use a guarded field conversation instead of settlement location lookup. This does not synchronize every Diplomacy feature. |
+| Improved Garrisons | Shares global/settlement settings, training templates and host patrol/recruiter projections at join/Sync/settings refresh. No recurring projection snapshot loop. Host runs the simulation; full remote management commands are not implemented. |
+| Diplomacy | Keeps native relation/event networking and reconciles full kingdom state on explicit Sync; suppresses duplicate client-side daily diplomacy simulation. Guards missing-geography valuation and unsafe messenger entry. This does not synchronize every Diplomacy feature. |
 | Modular Smithing 2 | Shares host crafting settings and crafted item definitions, including definitions using installed Bahamut donor items. All players still need the same item assets. |
-| Character Reload | Relays body, name, culture, race, level, skills and attributes for existing NPC heroes; refreshes native player appearance broadcasts. Perks, traits, focus and equipment editing are not fully covered by this adapter. |
+| Character Reload | Relays body, name, culture, race, level, skills, attributes and battle equipment IDs/modifiers for existing NPC heroes; refreshes native player appearance broadcasts. Perks, traits and focus editing are not fully covered. |
 | Custom Cultures / Custom Starting Loadout | Stores culture profiles by authenticated player identity and applies culture feat overrides to remote player projections. Tracks initial loadout per character slot. |
 | DismembermentPlus | Relays host dismemberment visuals for synchronized battles, avoids independent client rolls and co-op slow motion, and logs failures instead of opening a blocking error box. |
 | Together Lords | Keeps this mod's extension packets out of Together Lords' packet dispatcher. This is transport coexistence, not a replacement for its synchronization. |
@@ -41,6 +41,10 @@ Additional development features:
 - **Battle rewards:** divides the host's newly earned items, gold and ordinary prisoners among compatible participating players through Bannerlord Together's native reward flow. A captured lord uses the existing hero object and one assigned recipient; no hero copies are created. Disconnection, ransom, escape and multi-lord battles still need live testing.
 - **Shared clan income:** pools the clan's settlement income, connected humans' workshops and caravans, and passive trade-agreement/tribute receipts already provided by the active clan finance model. Tribute means the clan's normal share, not the entire kingdom treasury. Both host-owned and client-owned assets contribute. Canonical workshop and caravan IDs prevent duplicate collection, and pooled caravans do not also receive BT's private owner income payout. The common gross pool and host-authoritative garrison funding total are divided among connected compatible humans. Personal party and other local expenses remain separate, so net gold can differ or be negative. Native daily payment targets the local human on a shared-clan client. This assumes all participants share the host clan; owner projection, daily timing and balance replay still require live verification.
 - **Encyclopedia:** hides dead co-op projection heroes identified during despawn or by exact native log evidence. Real heroes are retained, not deleted. Old copies without log evidence require explicit identification.
+- **Clan lifecycle:** prevents reserved BT projection clans and clans with living human-player evidence from being destroyed during co-op cleanup, and filters false projection/living-player extinction notifications. Captivity does not imply death. Genuine NPC extinction and single-player notifications remain active; previously saved damage is not automatically undone.
+- **Autonomous companion equipment:** host-controlled upgrades for NPC companions leading their own parties, including companions in connected co-op players' clans. Uses their own party inventory/loot and town stock; returns replaced equipment to their party inventory. Preserves weapon/ammunition layouts and mount families, checks skill/sex restrictions and gives a small culture preference. Only battle equipment changes; player-controlled heroes and banners are excluded. At most two market purchases per daily attempt, spending at most 10% of the companion's own gold (20,000 cap) while retaining 1,000. Work is queued in small candidate batches, not a recurring all-hero scan. `btcg.companion_equipment off` / `on` lets the host stop/resume it. Inventory, merchant payment and remote party ownership still need live co-op testing.
+
+Companion item ranking adapts the MIT-licensed `ItemRanking`, `ItemView` and `ItemCategory` from [CompanionManagementSuite](https://github.com/Else123/CompanionManagementSuite), copyright Elias Elsner. The original license is included in `licenses/CompanionManagementSuite-MIT.txt` and the installed module. The full upstream mod is not required or bundled.
 
 The messenger adapter addresses unsafe conversation entry conditions; it is not proof that every reported native freeze or crash has been resolved. Include a fresh crash report if it reproduces.
 
@@ -63,11 +67,11 @@ The v0.2.4 camera hook was tested for binding with Xorberax’s Legacy **v1.0.8.
 
 ## Install
 
-**Recommended:** download `BannerlordTogetherCrashGuard-v0.3.3-Setup.exe` from [Releases](https://github.com/Enes-Balaban17/BannerlordTogetherCrashGuard/releases/latest), run it, and select the Bannerlord game folder. The installer includes the mod payload, automatically removes the installed module files' Windows download block (`Zone.Identifier`), and keeps a backup of an existing installation. No separate PowerShell or DLL-unblock step is needed. It only unblocks this mod's installed files; it does not change other mods or Windows security settings.
+**Recommended:** download `BannerlordTogetherCrashGuard-v0.4.0-Setup.exe` from [Releases](https://github.com/Enes-Balaban17/BannerlordTogetherCrashGuard/releases/latest), run it, and select the Bannerlord game folder. The installer includes the mod payload/license, automatically removes the installed module files' Windows download block (`Zone.Identifier`), and keeps a backup of an existing installation. No separate PowerShell or DLL-unblock step is needed. It only unblocks this mod's installed files; it does not change other mods or Windows security settings.
 
 1. Extract the release ZIP into the Bannerlord installation. The launcher manifest should be at `Modules\BannerlordTogetherCrashGuard\SubModule.xml`.
 2. In **Singleplayer → Mods**, enable **Bannerlord Together Crash Guard** below **BannerlordTogether**. Keep **BLT Deployment Crash Guard** disabled.
-3. Install **the same v0.3.3 build on the host and every client**, with the same optional mod versions and asset packs. Missing optional mods are skipped. Run the setup executable if you prefer installation without manual PowerShell commands.
+3. Install **the same v0.4.0 build on the host and every client**, with the same optional mod versions and asset packs. Missing optional mods are skipped. Run the setup executable if you prefer installation without manual PowerShell commands.
 4. If upgrading from **BLT Village Battle Fix**, remove the old copy from `Modules` and enable the new entry. Because the module ID changed in v0.2.3, an existing save may show the former module as missing. Starting with v0.3.0, compatibility identities and reward/projection bookkeeping are stored as campaign save data.
 
 For older dead encyclopedia duplicates, use the developer console to list exact IDs with `btcg.find_dead_heroes <name>`, then hide only the unwanted IDs with `btcg.hide_dead_heroes <id> [more ids]`. This hides entries and preserves the underlying save objects.
@@ -78,7 +82,7 @@ Open `%LOCALAPPDATA%\BannerlordTogetherCrashGuard\battle.log`.
 
 | Log entry | Meaning |
 | --- | --- |
-| `Loaded v0.3.3` | Harmony patches loaded |
+| `Loaded v0.4.0` | Harmony patches loaded |
 | `Inactive: Unsupported … SHA-256` | Installed binary differs from the supported build |
 | `[DEPLOY-GUARD] BROKEN_START_…` | Deployment exception was caught and spawn checks found a problem |
 | `[QUEST-RAID-EXIT] completed` | Mission cleanup returned. Check the quest result on the campaign map. |
@@ -90,6 +94,8 @@ Open `%LOCALAPPDATA%\BannerlordTogetherCrashGuard\battle.log`.
 | `[VILLAGE-SIMULATION]` | Casualty simulation held while a linked village mission is pending |
 | `[CLAN-INCOME]` | Actual gross income, assigned share and native daily net transfer |
 | `[COMPAT-PERF]` | A compatibility publish took at least 20 ms; rate limited to help diagnose remaining stalls |
+| `[CLAN-LIFECYCLE]` | Destruction of a living player/reserved projection clan was prevented |
+| `[COMPANION-EQUIP]` | Actual NPC equipment swap, personal market payment or an upgrade failure |
 
 When reporting an issue, include the game and mod versions and the relevant section of the log. Remove personal details before posting logs publicly.
 

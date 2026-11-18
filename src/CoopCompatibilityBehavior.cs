@@ -33,7 +33,9 @@ namespace BannerlordTogetherCrashGuard
         private long _lastRevision;
         private string _hostSession;
         private float _timer;
-        private bool _kingdomDirty = true;
+        private bool _settingsDirty = true;
+        private bool _runtimeDirty;
+        private float _settingsDebounce;
         private bool _financeDirty = true;
         private DateTime _lastSlowPublish;
         private float _requestTimer;
@@ -53,7 +55,6 @@ namespace BannerlordTogetherCrashGuard
         public override void RegisterEvents()
         {
             CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
-            CampaignEvents.HourlyTickEvent.AddNonSerializedListener(this, () => _financeDirty = true);
         }
 
         private void OnSessionLaunched(CampaignGameStarter starter)
@@ -124,17 +125,33 @@ namespace BannerlordTogetherCrashGuard
                 _requestFullSync = false;
             }
             _timer -= dt;
-            if (_timer > 0f)
-                return;
-            _timer = 2f;
+            _settingsDebounce -= dt;
             try
             {
                 if (CoopSession.IsHost && CoopSession.Server != null)
-                    Publish();
+                {
+                    if (_timer <= 0f)
+                    {
+                        _timer = 2f;
+                        foreach (int peer in _peers.Keys.Except(CoopSession.Server.GameplayPeerIds).ToArray())
+                        {
+                            _peers.Remove(peer);
+                            _peerCharacters.Remove(peer);
+                            _sentState.Remove(peer);
+                            _fullSync.Remove(peer);
+                            _runtimeDirty = _financeDirty = true;
+                        }
+                        ClanIncomeCompatibility.PlayerCount = 1 + _peers.Count;
+                    }
+                    if (_peers.Count > 0 && _settingsDebounce <= 0f &&
+                        (_settingsDirty || _runtimeDirty || _fullSync.Count > 0))
+                        Publish();
+                }
                 else if (CoopSession.IsClient && !CoopSession.IsSpectator)
                 {
-                    if (!HasHostState)
+                    if (!HasHostState && _timer <= 0f)
                     {
+                        _timer = 2f;
                         var hello = new CompatibilityMessage { Kind = 1 };
                         hello.Values["culture"] = CultureCompatibility.LocalProfile();
                         CoopSession.Client?.SendRaw(CompatibilityWire.Encode(hello));
@@ -161,7 +178,9 @@ namespace BannerlordTogetherCrashGuard
             ClanIncomeCompatibility.ShareIndex = 0;
             SharedAssetIncome.Reset();
             _timer = 0;
-            _kingdomDirty = true;
+            _settingsDirty = true;
+            _runtimeDirty = false;
+            _settingsDebounce = 0;
             _financeDirty = true;
             _reportedErrors.Clear();
             AppearanceCompatibility.Reset();
@@ -202,9 +221,11 @@ namespace BannerlordTogetherCrashGuard
                     welcome["income-index"] = (Array.IndexOf(_peers.Keys.OrderBy(id => id).ToArray(), envelope.PeerId) + 1).ToString(CultureInfo.InvariantCulture);
                     CultureCompatibility.Capture(welcome, _peers.Keys);
                     SmithingCompatibility.Capture(welcome);
+                    GarrisonsCompatibility.Capture(welcome);
+                    RewardShareCompatibility.Capture(welcome, _peers.Keys);
                     SendState(envelope.PeerId, welcome);
                     AppearanceCompatibility.SendFullState(envelope.PeerId);
-                    _fullSync.Add(envelope.PeerId);
+                    _runtimeDirty = true;
                 }
                 else if (_peers.TryGetValue(envelope.PeerId, out ulong epoch) && epoch == envelope.PeerConnectionEpoch)
                 {
@@ -262,8 +283,11 @@ namespace BannerlordTogetherCrashGuard
                     float speed = float.Parse(speedText, CultureInfo.InvariantCulture);
                     if (speed >= 1f && speed <= 128f)
                     {
+                        bool showExtra = HasHostState && Math.Abs(HostSpeed - speed) > 0.001f && SpeedCompatibility.IsExtra(speed);
                         HostSpeed = speed;
                         Campaign.Current.SpeedUpMultiplier = speed;
+                        if (showExtra)
+                            SpeedCompatibility.Show(speed);
                     }
                 }
                 SmithingCompatibility.Apply(message.Values);
@@ -278,10 +302,11 @@ namespace BannerlordTogetherCrashGuard
                 SmithingCompatibility.PublishClientRecords();
         }
 
-        private Dictionary<string, string> Capture()
+        private Dictionary<string, string> Capture(bool settings = true)
         {
             var values = new Dictionary<string, string>(StringComparer.Ordinal);
-            HostSettingsCompatibility.Capture(values);
+            if (settings)
+                HostSettingsCompatibility.Capture(values);
             values["clan"] = Clan.PlayerClan?.StringId ?? "";
             values["companions"] = (Clan.PlayerClan == null ? 0 :
                 Campaign.Current.Models.ClanTierModel.GetCompanionLimit(Clan.PlayerClan)).ToString(CultureInfo.InvariantCulture);
@@ -315,9 +340,13 @@ namespace BannerlordTogetherCrashGuard
             ClanIncomeCompatibility.PlayerCount = 1 + _peers.Count;
             if (_peers.Count == 0)
                 return;
-            Dictionary<string, string> state = Capture();
-            GarrisonsCompatibility.Capture(state);
-            SmithingCompatibility.CaptureFlags(state);
+            bool fullRequested = _fullSync.Count > 0;
+            Dictionary<string, string> state = Capture(_settingsDirty || fullRequested);
+            if (_settingsDirty || fullRequested)
+            {
+                GarrisonsCompatibility.Capture(state);
+                SmithingCompatibility.CaptureFlags(state);
+            }
             CultureCompatibility.Capture(state, _peers.Keys);
             RewardShareCompatibility.Capture(state, _peers.Keys);
             foreach (int peer in _peers.Keys)
@@ -337,10 +366,10 @@ namespace BannerlordTogetherCrashGuard
                     AppearanceCompatibility.SendFullState(peer);
                     BattleLog.Write("[COOP-COMPAT] explicit full state synchronized peer=" + peer);
                 }
-                if (full || _kingdomDirty)
+                if (full)
                     KingdomSyncBehavior.Instance?.SendFullSyncToPeerBypassBattleGate(peer, "crashguard-state-change");
             }
-            _kingdomDirty = false;
+            _settingsDirty = _runtimeDirty = false;
             if (publishClock.ElapsedMilliseconds >= 20 && (DateTime.UtcNow - _lastSlowPublish).TotalSeconds >= 15)
             {
                 _lastSlowPublish = DateTime.UtcNow;
@@ -364,7 +393,7 @@ namespace BannerlordTogetherCrashGuard
                     if (CoopSession.Server.SendToPeerReliableOrdered(peer, CompatibilityWire.Encode(chunk)))
                         cache.Commit(chunk.Values);
                     else
-                        _fullSync.Add(peer);
+                        BattleLog.Write("[COOP-COMPAT] send deferred; use explicit Sync if state is missing peer=" + peer);
                     chunk = new CompatibilityMessage { Kind = 2, Session = _session, Revision = ++_revision };
                     size = 0;
                 }
@@ -375,7 +404,7 @@ namespace BannerlordTogetherCrashGuard
                 if (CoopSession.Server.SendToPeerReliableOrdered(peer, CompatibilityWire.Encode(chunk)))
                     cache.Commit(chunk.Values);
                 else
-                    _fullSync.Add(peer);
+                    BattleLog.Write("[COOP-COMPAT] send deferred; use explicit Sync if state is missing peer=" + peer);
         }
 
         internal void RequestFullSync(int peer = -1)
@@ -393,16 +422,21 @@ namespace BannerlordTogetherCrashGuard
                 _requestFullSync = true;
         }
 
-        internal void MarkKingdomChanged()
+        internal void MarkSettingsChanged()
         {
-            if (CoopSession.IsHost)
-                _kingdomDirty = true;
+            if (Applying || !CoopSession.IsHost)
+                return;
+            _settingsDirty = true;
+            _settingsDebounce = 0.2f;
         }
 
         internal void MarkFinanceChanged()
         {
             _financeDirty = true;
+            _runtimeDirty = true;
         }
+
+        internal void MarkRuntimeChanged() => _runtimeDirty = true;
 
         internal void PublishChanges(Dictionary<string, string> values)
         {
@@ -445,13 +479,19 @@ namespace BannerlordTogetherCrashGuard
         private static class SpeedPatch
         {
             [HarmonyPriority(Priority.Last)]
-            private static void Prefix(ref float value)
+            private static void Prefix(ref float value, out float __state)
             {
+                __state = Campaign.Current?.SpeedUpMultiplier ?? value;
                 if (!CoopSession.IsClient || !HasHostState || Applying)
                     return;
                 if (Math.Abs(value - HostSpeed) > 0.001f)
                     Instance?.RequestSpeed(value);
                 value = HostSpeed;
+            }
+
+            private static void Postfix(Campaign __instance, float __state)
+            {
+                SpeedCompatibility.Changed(__state, __instance.SpeedUpMultiplier);
             }
         }
     }

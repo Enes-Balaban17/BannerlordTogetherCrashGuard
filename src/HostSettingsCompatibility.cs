@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -29,6 +30,64 @@ namespace BannerlordTogetherCrashGuard
         private static readonly Dictionary<string, Tuple<object, MemberInfo, object>> Originals =
             new Dictionary<string, Tuple<object, MemberInfo, object>>(StringComparer.Ordinal);
         private static readonly HashSet<string> Failures = new HashSet<string>();
+        private static readonly HashSet<object> Observed = new HashSet<object>();
+
+        internal static void InstallChangeHooks(Harmony harmony)
+        {
+            foreach (Binding binding in Bindings)
+            {
+                try
+                {
+                object instance = binding.GetInstance();
+                if (instance == null)
+                    continue;
+                if (instance is INotifyPropertyChanged notifier && Observed.Add(instance))
+                {
+                    var members = Members(instance).ToDictionary(member => member.Name);
+                    var values = members.ToDictionary(pair => pair.Key, pair => Read(instance, pair.Value));
+                    notifier.PropertyChanged += (_, args) =>
+                    {
+                        try
+                        {
+                            foreach (var pair in members)
+                            {
+                                if (!string.IsNullOrEmpty(args.PropertyName) && args.PropertyName != pair.Key)
+                                    continue;
+                                object value = Read(instance, pair.Value);
+                                if (Equals(values[pair.Key], value))
+                                    continue;
+                                values[pair.Key] = value;
+                                Changed();
+                            }
+                        }
+                        catch (Exception error) when (DeploymentCrashGuard.CanSuppress(error)) { Report(binding.Id, error); }
+                    };
+                }
+                foreach (var property in Members(instance).OfType<PropertyInfo>())
+                {
+                    MethodInfo setter = property.GetSetMethod(true);
+                    if (setter != null && Harmony.GetPatchInfo(setter)?.Owners.Contains(SubModule.Owner) != true)
+                        harmony.Patch(setter, new HarmonyMethod(typeof(HostSettingsCompatibility), nameof(SettingBefore)),
+                            new HarmonyMethod(typeof(HostSettingsCompatibility), nameof(SettingAfter)));
+                }
+                }
+                catch (Exception error) when (DeploymentCrashGuard.CanSuppress(error)) { Report(binding.Id, error); }
+            }
+        }
+
+        private static void Changed() => CoopCompatibilityBehavior.Instance?.MarkSettingsChanged();
+
+        private static void SettingBefore(object __instance, MethodBase __originalMethod, out object __state)
+        {
+            __state = AccessTools.Property(__originalMethod.DeclaringType, __originalMethod.Name.Substring(4))?.GetValue(__instance);
+        }
+
+        private static void SettingAfter(object __instance, MethodBase __originalMethod, object __state)
+        {
+            object value = AccessTools.Property(__originalMethod.DeclaringType, __originalMethod.Name.Substring(4))?.GetValue(__instance);
+            if (!Equals(value, __state))
+                Changed();
+        }
 
         private static void Report(string binding, Exception exception)
         {

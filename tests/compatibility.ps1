@@ -90,8 +90,11 @@ try {
         'TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel.AddIncomeFromParty',
         'BannerlordTogether.ClientCaravanCreationBehavior.HasDailyFinanceDeltaSent',
         'TaleWorlds.CampaignSystem.Settlements.Workshops.Workshop.ChangeOwnerOfWorkshop',
-        'TaleWorlds.CampaignSystem.Actions.DeclareWarAction.ApplyInternal',
-        'TaleWorlds.CampaignSystem.Actions.MakePeaceAction.Apply',
+        'OffTheClock.CampaignTweaks.SubModule.LoadSettings',
+        'ModularSmithing.Crafting.MSmithConfig.Save',
+        'ModularSmithing.Crafting.MSmithConfig.Reload',
+        'TaleWorlds.CampaignSystem.Actions.DestroyClanAction.ApplyInternal',
+        'TaleWorlds.CampaignSystem.LogEntries.ClanDestroyedLogEntry.get_IsVisibleNotification',
         'Diplomacy.Messengers.MessengerManager.StartDialogue',
         'Diplomacy.CampaignBehaviors.CivilWarBehavior.DailyTick',
         'ImprovedGarrisons.SaveSystem.GarrisonDailyBehavior.DailyBehavior',
@@ -346,6 +349,117 @@ public sealed class AssetWalletFixture
         $finance.GetField('ShareIndex', $flags).SetValue($null, 0)
     }
     'Shared assets passed: host/client workshops and caravans, canonical deduplication, preview without withdrawal, one collection per asset, shared garrison totals and separate personal expenses.'
+
+    Add-Type -ReferencedAssemblies @('netstandard', 'System.Core', (Join-Path $gameBin 'TaleWorlds.CampaignSystem.dll'), (Join-Path $gameBin 'TaleWorlds.Core.dll'), (Join-Path $gameBin 'TaleWorlds.Library.dll'), (Join-Path $gameBin 'TaleWorlds.ObjectSystem.dll')) -TypeDefinition @'
+public static class IdleSyncFixture
+{
+    public static TaleWorlds.CampaignSystem.Campaign Campaign;
+    public static int Publishes;
+    public static bool CampaignGetter(ref TaleWorlds.CampaignSystem.Campaign __result) { __result = Campaign; return false; }
+    public static bool PeerGetter(ref int[] __result) { __result = new int[] { 1 }; return false; }
+    public static bool PublishPrefix(object __instance)
+    {
+        Publishes++;
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        __instance.GetType().GetField("_settingsDirty", flags).SetValue(__instance, false);
+        __instance.GetType().GetField("_runtimeDirty", flags).SetValue(__instance, false);
+        ((System.Collections.Generic.HashSet<int>)__instance.GetType().GetField("_fullSync", flags).GetValue(__instance)).Clear();
+        return false;
+    }
+}
+public sealed class ScalarSettingFixture { public int Value { get; set; } }
+'@
+    $behaviorType = $fix.GetType('BannerlordTogetherCrashGuard.CoopCompatibilityBehavior', $true)
+    $behavior = [Activator]::CreateInstance($behaviorType, $true)
+    $instanceFlags = [Reflection.BindingFlags]'Instance, NonPublic'
+    $server = [Runtime.Serialization.FormatterServices]::GetUninitializedObject([BannerlordTogether.Network.CoopServer])
+    $behaviorType.GetField('_network', $instanceFlags).SetValue($behavior, $server)
+    $behaviorType.GetField('_peers', $instanceFlags).GetValue($behavior).Add(1, [uint64]1)
+    $behaviorType.GetField('_settingsDirty', $instanceFlags).SetValue($behavior, $false)
+    $behaviorType.GetField('_runtimeDirty', $instanceFlags).SetValue($behavior, $false)
+    [IdleSyncFixture]::Campaign = [Runtime.Serialization.FormatterServices]::GetUninitializedObject([TaleWorlds.CampaignSystem.Campaign])
+    $idleOwner = [HarmonyLib.Harmony]::new('btcg.tests.idle')
+    $idleOwner.Patch([HarmonyLib.AccessTools]::PropertyGetter([TaleWorlds.CampaignSystem.Campaign], 'Current'), [HarmonyLib.HarmonyMethod]::new([IdleSyncFixture].GetMethod('CampaignGetter')), $null, $null, $null) | Out-Null
+    $idleOwner.Patch([HarmonyLib.AccessTools]::PropertyGetter([BannerlordTogether.Network.CoopServer], 'GameplayPeerIds'), [HarmonyLib.HarmonyMethod]::new([IdleSyncFixture].GetMethod('PeerGetter')), $null, $null, $null) | Out-Null
+    $idleOwner.Patch($behaviorType.GetMethod('Publish', $instanceFlags), [HarmonyLib.HarmonyMethod]::new([IdleSyncFixture].GetMethod('PublishPrefix')), $null, $null, $null) | Out-Null
+    $previousHost = [BannerlordTogether.CoopSession]::IsHost
+    $previousClient = [BannerlordTogether.CoopSession]::IsClient
+    $previousServer = [BannerlordTogether.CoopSession]::Server
+    $previousState = [BannerlordTogether.CoopSession]::State
+    try {
+        [BannerlordTogether.CoopSession]::IsHost = $true
+        [BannerlordTogether.CoopSession]::IsClient = $false
+        [BannerlordTogether.CoopSession]::Server = $server
+        [BannerlordTogether.CoopSession]::State = [BannerlordTogether.CoopSessionState]::Ready
+        $tick = $behaviorType.GetMethod('TickCore', $instanceFlags)
+        for ($frame = 0; $frame -lt 400; $frame++) { $tick.Invoke($behavior, [object[]]@([single]0.1)) }
+        if ([IdleSyncFixture]::Publishes -ne 0) { throw 'Idle gameplay still triggers periodic full/settings publishing' }
+        $behaviorType.GetMethod('MarkSettingsChanged', $instanceFlags).Invoke($behavior, $null)
+        for ($frame = 0; $frame -lt 10; $frame++) { $tick.Invoke($behavior, [object[]]@([single]0.1)) }
+        if ([IdleSyncFixture]::Publishes -ne 1) { throw 'A host setting edit did not cause exactly one publish' }
+        $behaviorType.GetMethod('RequestFullSync', $instanceFlags).Invoke($behavior, [object[]]@([int]1))
+        for ($frame = 0; $frame -lt 10; $frame++) { $tick.Invoke($behavior, [object[]]@([single]0.1)) }
+        if ([IdleSyncFixture]::Publishes -ne 2) { throw 'Explicit resync did not cause exactly one publish' }
+        $watcher = $fix.GetType('BannerlordTogetherCrashGuard.HostSettingsCompatibility')
+        $idleOwner.Patch([ScalarSettingFixture].GetProperty('Value').GetSetMethod(),
+            [HarmonyLib.HarmonyMethod]::new($watcher.GetMethod('SettingBefore', $flags)),
+            [HarmonyLib.HarmonyMethod]::new($watcher.GetMethod('SettingAfter', $flags)), $null, $null) | Out-Null
+        $scalar = [ScalarSettingFixture]::new()
+        $scalar.Value = 9
+        for ($frame = 0; $frame -lt 10; $frame++) { $tick.Invoke($behavior, [object[]]@([single]0.1)) }
+        if ([IdleSyncFixture]::Publishes -ne 3) { throw 'A real scalar setter change was not dispatched' }
+        for ($frame = 0; $frame -lt 400; $frame++) {
+            $scalar.Value = 9
+            $tick.Invoke($behavior, [object[]]@([single]0.1))
+        }
+        if ([IdleSyncFixture]::Publishes -ne 3) { throw 'Unchanged scalar setter writes still cause repeated publishing' }
+    } finally {
+        [BannerlordTogether.CoopSession]::IsHost = $previousHost
+        [BannerlordTogether.CoopSession]::IsClient = $previousClient
+        [BannerlordTogether.CoopSession]::Server = $previousServer
+        [BannerlordTogether.CoopSession]::State = $previousState
+        $idleOwner.UnpatchAll('btcg.tests.idle')
+        $behaviorType.GetField('Instance', $flags).SetValue($null, $null)
+    }
+    'Actual compatibility tick passed: 40 seconds idle produced zero publishes; one setting edit and one explicit resync produced exactly one publish each.'
+
+    $equipmentBehavior = $fix.GetType('BannerlordTogetherCrashGuard.CompanionEquipmentBehavior', $true)
+    $budgetMethod = $equipmentBehavior.GetMethod('PurchaseBudget', $flags)
+    foreach ($case in @(@(500,0), @(1000,0), @(1500,150), @(10000,1000), @(500000,20000))) {
+        if ($budgetMethod.Invoke($null, [object[]]@([int]$case[0])) -ne $case[1]) { throw 'Companion reserve or purchase budget was violated' }
+    }
+    $itemView = $fix.GetType('BannerlordTogetherCrashGuard.CompanionEquipment.ItemView')
+    $category = [Enum]::ToObject($fix.GetType('BannerlordTogetherCrashGuard.CompanionEquipment.ItemCategory'), 0)
+    $rank = $fix.GetType('BannerlordTogetherCrashGuard.CompanionEquipment.ItemRanking').GetMethod('IsBetter')
+    $worn = [Activator]::CreateInstance($itemView, [object[]]@('worn', $category, [single]100, [int]3, 'one_handed', [int]0))
+    $worse = [Activator]::CreateInstance($itemView, [object[]]@('worse', $category, [single]90, [int]5, 'one_handed', [int]0))
+    $better = [Activator]::CreateInstance($itemView, [object[]]@('better', $category, [single]110, [int]3, 'one_handed', [int]0))
+    if ($rank.Invoke($null, [object[]]@($worse,$worn)) -or !$rank.Invoke($null, [object[]]@($better,$worn))) { throw 'Companion ranking would replace stronger worn gear with a worse item' }
+    $syntheticClan = [Runtime.Serialization.FormatterServices]::GetUninitializedObject([TaleWorlds.CampaignSystem.Clan])
+    [HarmonyLib.AccessTools]::Property([TaleWorlds.CampaignSystem.Clan], 'StringId').SetValue($syntheticClan, 'bt_remote_client_player_faction')
+    $notification = [Runtime.Serialization.FormatterServices]::GetUninitializedObject([TaleWorlds.CampaignSystem.LogEntries.ClanDestroyedLogEntry])
+    [HarmonyLib.AccessTools]::Field([TaleWorlds.CampaignSystem.LogEntries.ClanDestroyedLogEntry], '_clan').SetValue($notification, $syntheticClan)
+    $oldHost = [BannerlordTogether.CoopSession]::IsHost
+    try {
+        [BannerlordTogether.CoopSession]::IsHost = $true
+        if ($notification.IsVisibleNotification) { throw 'Synthetic co-op clan still produces an extinction notification' }
+        $destroy = [HarmonyLib.AccessTools]::Method([TaleWorlds.CampaignSystem.Actions.DestroyClanAction], 'ApplyInternal')
+        $detail = [Enum]::ToObject($destroy.GetParameters()[1].ParameterType, 0)
+        $destroy.Invoke($null, [object[]]@($syntheticClan,$detail))
+        $realClan = [Runtime.Serialization.FormatterServices]::GetUninitializedObject([TaleWorlds.CampaignSystem.Clan])
+        [HarmonyLib.AccessTools]::Property([TaleWorlds.CampaignSystem.Clan], 'StringId').SetValue($realClan, 'ordinary_npc_clan')
+        [HarmonyLib.AccessTools]::Field([TaleWorlds.CampaignSystem.LogEntries.ClanDestroyedLogEntry], '_clan').SetValue($notification, $realClan)
+        if (!$notification.IsVisibleNotification) { throw 'Genuine NPC clan extinction notifications were hidden' }
+    } finally { [BannerlordTogether.CoopSession]::IsHost = $oldHost }
+    if (!$notification.IsVisibleNotification) { throw 'Single-player notifications were changed by a co-op-only guard' }
+    $speedType = $fix.GetType('BannerlordTogetherCrashGuard.SpeedCompatibility', $true)
+    $betterTimeType = [HarmonyLib.AccessTools]::TypeByName('BetterTime.Settings')
+    $betterTimeSettings = $betterTimeType.GetProperty('Instance', [Reflection.BindingFlags]'Static, Public, FlattenHierarchy').GetValue($null)
+    $extraSpeed = [single]8
+    if ($null -ne $betterTimeSettings) { $extraSpeed = [single][HarmonyLib.AccessTools]::Property($betterTimeType, 'ExtraFastForwardMultiplier').GetValue($betterTimeSettings) }
+    if (!$speedType.GetMethod('IsExtra', $flags).Invoke($null, [object[]]@($extraSpeed)) -or
+        $speedType.GetMethod('IsExtra', $flags).Invoke($null, [object[]]@([single]($extraSpeed + 0.5)))) { throw 'Configured Extra Fast multiplier was not recognized' }
+    'Companion budget/upgrade ranking and synthetic clan destruction/notification guards passed; single-player notifications remain active.'
 
     $settings = $fix.GetType('BannerlordTogetherCrashGuard.HostSettingsCompatibility', $true)
     $bindings = $settings.GetField('Bindings', $flags).GetValue($null)

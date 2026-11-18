@@ -52,6 +52,7 @@ try {
     try {
         $entries = @{
             "$module/SubModule.xml" = $manifest
+            "$module/CompanionManagementSuite-LICENSE.txt" = Join-Path $PSScriptRoot 'licenses\CompanionManagementSuite-MIT.txt'
             "$module/bin/Win64_Shipping_Client/BannerlordTogetherCrashGuard.dll" = $dll
             'README.md' = Join-Path $PSScriptRoot 'README.md'
             'CHANGELOG.md' = Join-Path $PSScriptRoot 'CHANGELOG.md'

@@ -27,9 +27,13 @@ namespace BannerlordTogetherCrashGuard
             Hook(harmony, "ModularSmithing.Crafting.SmithingPersistenceBehavior", "Register", null, nameof(SmithingRegistered));
             Hook(harmony, "BannerlordTogether.PlayerTradeBehavior", "BeginSaveResync", null, nameof(SaveResyncStarted));
             Hook(harmony, "BannerlordTogether.CoopCampaignBehavior", "PrepareGameplayPeerForIsolatedResync", null, nameof(PeerResyncPrepared));
-            Hook(harmony, "TaleWorlds.CampaignSystem.Actions.DeclareWarAction", "ApplyInternal", null, nameof(KingdomChanged));
-            Hook(harmony, "TaleWorlds.CampaignSystem.Actions.MakePeaceAction", "Apply", null, nameof(KingdomChanged));
+            Hook(harmony, "OffTheClock.CampaignTweaks.SubModule", "LoadSettings", null, nameof(SettingsChanged));
+            Hook(harmony, "ModularSmithing.Crafting.MSmithConfig", "Save", null, nameof(SettingsChanged));
+            Hook(harmony, "ModularSmithing.Crafting.MSmithConfig", "Reload", null, nameof(SettingsChanged));
+            Hook(harmony, "ModularSmithing.Crafting.MSmithCraftCommands", "FreeCraft", null, nameof(SettingsChanged));
+            Hook(harmony, "ModularSmithing.Crafting.MSmithCraftCommands", "EnableWeapons", null, nameof(SettingsChanged));
             Hook(harmony, "TaleWorlds.CampaignSystem.Settlements.Workshops.Workshop", "ChangeOwnerOfWorkshop", null, nameof(FinanceChanged));
+            Hook(harmony, "TaleWorlds.CampaignSystem.Actions.EndCaptivityAction", "ApplyInternal", null, nameof(PrisonerReleased));
             Hook(harmony, "Diplomacy.CampaignBehaviors.CivilWarBehavior", "DailyTick", nameof(AuthorityPrefix), null);
             Hook(harmony, "Diplomacy.CampaignBehaviors.CivilWarBehavior", "DailyTickClan", nameof(AuthorityPrefix), null);
             Hook(harmony, "Diplomacy.CampaignBehaviors.DiplomaticAgreementBehavior", "UpdateDiplomaticAgreements", nameof(AuthorityPrefix), null);
@@ -43,6 +47,8 @@ namespace BannerlordTogetherCrashGuard
             Install("Diplomacy fief valuation", () => DiplomacySettlementCompatibility.Install(harmony));
             Install("Encyclopedia", () => GhostEncyclopediaCompatibility.Install(harmony));
             Install("Clan income", () => ClanIncomeCompatibility.Install(harmony));
+            Install("Settings change events", () => HostSettingsCompatibility.InstallChangeHooks(harmony));
+            Install("Clan lifecycle", () => ClanLifecycleCompatibility.Install(harmony));
             Install("Dismemberment", () => DismembermentCompatibility.Install(harmony));
             Install("Custom cultures and loadout", () => CultureCompatibility.Install(harmony));
             Install("Battle rewards", () => RewardShareCompatibility.Install(harmony));
@@ -184,14 +190,19 @@ namespace BannerlordTogetherCrashGuard
                 CoopCompatibilityBehavior.Instance?.RequestFullSync(peerId);
         }
 
-        private static void KingdomChanged()
+        private static void SettingsChanged()
         {
-            CoopCompatibilityBehavior.Instance?.MarkKingdomChanged();
+            CoopCompatibilityBehavior.Instance?.MarkSettingsChanged();
         }
 
         private static void FinanceChanged()
         {
             CoopCompatibilityBehavior.Instance?.MarkFinanceChanged();
+        }
+
+        private static void PrisonerReleased(Hero __0)
+        {
+            RewardShareCompatibility.PrisonerReleased(__0);
         }
     }
 }

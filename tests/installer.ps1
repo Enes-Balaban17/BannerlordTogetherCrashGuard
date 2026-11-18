@@ -19,7 +19,7 @@ $version = ([xml](Get-Content -LiteralPath (Join-Path $module 'SubModule.xml') -
 $assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($dll).Version.ToString(3)
 if ($version -ne ('v' + $assemblyVersion)) { throw 'Installed manifest and assembly versions differ' }
 $before = (Get-FileHash -LiteralPath $dll).Hash
-foreach ($resourceName in 'SubModule.xml','BannerlordTogetherCrashGuard.dll') {
+foreach ($resourceName in 'SubModule.xml','BannerlordTogetherCrashGuard.dll','CompanionManagementSuite-LICENSE.txt') {
     $stream = $setup.GetManifestResourceStream($resourceName)
     try {
         $sha = [Security.Cryptography.SHA256]::Create()

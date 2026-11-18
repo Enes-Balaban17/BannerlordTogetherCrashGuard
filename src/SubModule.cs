@@ -72,7 +72,10 @@ namespace BannerlordTogetherCrashGuard
         {
             base.OnGameStart(game, gameStarter);
             if (_harmony != null && game.GameType is Campaign && gameStarter is CampaignGameStarter campaignStarter)
+            {
                 campaignStarter.AddBehavior(new CoopCompatibilityBehavior());
+                campaignStarter.AddBehavior(new CompanionEquipmentBehavior());
+            }
         }
 
         protected override void OnApplicationTick(float dt)
@@ -80,6 +83,8 @@ namespace BannerlordTogetherCrashGuard
             base.OnApplicationTick(dt);
             if (_harmony != null)
                 CoopCompatibilityBehavior.Instance?.Tick(dt);
+            if (_harmony != null)
+                CompanionEquipmentBehavior.Instance?.Tick();
         }
 
         private static void CheckBuild(Assembly assembly, string expected)

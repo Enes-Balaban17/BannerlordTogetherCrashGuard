@@ -125,6 +125,7 @@ namespace BannerlordTogetherCrashGuard.Setup
                 Directory.CreateDirectory(stagedBin);
                 WriteResource("SubModule.xml", staged);
                 WriteResource(Module + ".dll", stagedBin);
+                WriteResource("CompanionManagementSuite-LICENSE.txt", staged);
                 UnblockFile(Path.Combine(staged, "SubModule.xml"));
                 UnblockFile(Path.Combine(stagedBin, Module + ".dll"));
                 if (Directory.Exists(destination))
@@ -145,7 +146,7 @@ namespace BannerlordTogetherCrashGuard.Setup
                 // Delete only files created here. Retain any previous installation as a backup.
                 try
                 {
-                    foreach (string file in new[] { Path.Combine(staged, "SubModule.xml"), Path.Combine(stagedBin, Module + ".dll") })
+                    foreach (string file in new[] { Path.Combine(staged, "SubModule.xml"), Path.Combine(staged, "CompanionManagementSuite-LICENSE.txt"), Path.Combine(stagedBin, Module + ".dll") })
                     {
                         if (File.Exists(file))
                             File.Delete(file);

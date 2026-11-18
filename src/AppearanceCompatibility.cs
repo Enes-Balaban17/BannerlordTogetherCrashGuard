@@ -26,9 +26,15 @@ namespace BannerlordTogetherCrashGuard
             public int Level { get; set; }
             public Dictionary<string, int> Skills { get; set; }
             public Dictionary<string, int> Attributes { get; set; }
+            public GearSlot[] Equipment { get; set; }
         }
 
-        private static readonly Dictionary<string, string> Published = new Dictionary<string, string>();
+        public sealed class GearSlot
+        {
+            public string Item { get; set; }
+            public string Modifier { get; set; }
+        }
+
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
         private static string _localAppearance;
         private static readonly HashSet<string> FailedHeroes = new HashSet<string>();
@@ -38,7 +44,6 @@ namespace BannerlordTogetherCrashGuard
 
         internal static void Reset()
         {
-            Published.Clear();
             _localAppearance = null;
             FailedHeroes.Clear();
             GhostData.Clear();
@@ -74,7 +79,12 @@ namespace BannerlordTogetherCrashGuard
                 Name = hero.Name?.ToString() ?? hero.StringId, FirstName = hero.FirstName?.ToString() ?? hero.Name?.ToString() ?? hero.StringId,
                 Culture = hero.Culture?.StringId ?? "", Female = hero.IsFemale, Race = hero.CharacterObject.Race, Level = hero.Level,
                 Skills = Skills.All.ToDictionary(skill => skill.StringId, skill => hero.GetSkillValue(skill)),
-                Attributes = Attributes.All.ToDictionary(attribute => attribute.StringId, attribute => hero.GetAttributeValue(attribute))
+                Attributes = Attributes.All.ToDictionary(attribute => attribute.StringId, attribute => hero.GetAttributeValue(attribute)),
+                Equipment = Enumerable.Range(0, 12).Select(index => new GearSlot
+                {
+                    Item = hero.BattleEquipment[(EquipmentIndex)index].Item?.StringId ?? "",
+                    Modifier = hero.BattleEquipment[(EquipmentIndex)index].ItemModifier?.StringId ?? ""
+                }).ToArray()
             });
         }
 
@@ -89,22 +99,6 @@ namespace BannerlordTogetherCrashGuard
                 return;
             CoopCompatibilityBehavior.Instance?.PublishChanges(new Dictionary<string, string>
                 { ["hero/" + hero.StringId] = Serialize(hero) });
-        }
-
-        internal static void CaptureChanges(Dictionary<string, string> state)
-        {
-            foreach (Hero hero in Hero.AllAliveHeroes)
-            {
-                if (!Eligible(hero))
-                    continue;
-                string value = TrySerialize(hero);
-                if (value == null)
-                    continue;
-                if (Published.TryGetValue(hero.StringId, out string old) && old == value)
-                    continue;
-                state["hero/" + hero.StringId] = value;
-                Published[hero.StringId] = value;
-            }
         }
 
         internal static void SendFullState(int peer)
@@ -219,6 +213,25 @@ namespace BannerlordTogetherCrashGuard
                 foreach (CharacterAttribute attribute in Attributes.All)
                     if (data.Attributes.TryGetValue(attribute.StringId, out int value) && value >= 0 && value <= 10000)
                         AccessTools.Method(typeof(Hero), "SetAttributeValueInternal").Invoke(hero, new object[] { attribute, value });
+            if (data.Equipment != null && data.Equipment.Length == 12)
+            {
+                var gear = new EquipmentElement[12];
+                bool valid = true;
+                for (int index = 0; index < gear.Length; index++)
+                {
+                    GearSlot slot = data.Equipment[index];
+                    if (slot == null) { valid = false; break; }
+                    if (string.IsNullOrEmpty(slot.Item))
+                        continue;
+                    ItemObject item = MBObjectManager.Instance.GetObject<ItemObject>(slot.Item);
+                    ItemModifier modifier = string.IsNullOrEmpty(slot.Modifier) ? null : MBObjectManager.Instance.GetObject<ItemModifier>(slot.Modifier);
+                    if (item == null || (!string.IsNullOrEmpty(slot.Modifier) && modifier == null)) { valid = false; break; }
+                    gear[index] = new EquipmentElement(item, modifier);
+                }
+                if (valid)
+                    for (int index = 0; index < gear.Length; index++)
+                        hero.BattleEquipment.AddEquipmentToSlotWithoutAgent((EquipmentIndex)index, gear[index]);
+            }
             Type utils = AccessTools.TypeByName("CharacterReload.Utils.HeroUtils");
             if (utils != null)
                 AccessTools.Property(utils, "refreshEncyclopedia")?.SetValue(null, true);
