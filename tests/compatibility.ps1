@@ -83,6 +83,11 @@ try {
         'Diplomacy.CampaignBehaviors.MaintainInfluenceBehavior.GetGoldValueForFief',
         'Diplomacy.CampaignBehaviors.MaintainInfluenceBehavior.GetBestFiefBarter',
         'Diplomacy.CampaignBehaviors.MaintainInfluenceBehavior.ReduceCorruption',
+        'TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel.CalculateClanIncomeInternal',
+        'TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel.AddPartyExpense',
+        'TaleWorlds.CampaignSystem.CampaignBehaviors.ClanVariablesCampaignBehavior.DailyTickClan',
+        'TaleWorlds.CampaignSystem.Actions.DeclareWarAction.ApplyInternal',
+        'TaleWorlds.CampaignSystem.Actions.MakePeaceAction.Apply',
         'Diplomacy.Messengers.MessengerManager.StartDialogue',
         'Diplomacy.CampaignBehaviors.CivilWarBehavior.DailyTick',
         'ImprovedGarrisons.SaveSystem.GarrisonDailyBehavior.DailyBehavior',
@@ -189,6 +194,23 @@ public sealed class SettingsFixture
 }
 public static class ConservationFixture
 {
+    public static void CheckIncome(System.Reflection.MethodInfo split)
+    {
+        for (int players = 2; players <= 4; players++)
+        for (int total = -1024; total <= 1024; total++)
+        {
+            int sum = 0, minimum = int.MaxValue, maximum = int.MinValue;
+            for (int index = 0; index < players; index++)
+            {
+                int share = (int)split.Invoke(null, new object[] { (float)total, players, index });
+                sum += share;
+                minimum = System.Math.Min(minimum, share);
+                maximum = System.Math.Max(maximum, share);
+            }
+            if (sum != total || maximum - minimum > 1)
+                throw new System.Exception("Income allocation lost or duplicated money");
+        }
+    }
     public static void Check(System.Reflection.MethodInfo split)
     {
         for (int players = 2; players <= 4; players++)
@@ -235,6 +257,36 @@ public static class ConservationFixture
     $guarded = @($rewritten | Where-Object { $_.operand -is [Reflection.MethodInfo] -and $_.operand.Name -eq 'ReleaseUnassignedPrisoner' })
     if ($guarded.Count -ne 2) { throw 'Both ghost cleanup release paths must preserve assigned lords' }
     'Lord custody cleanup rewrite passed on the installed Bannerlord Together binary.'
+
+    $finance = $fix.GetType('BannerlordTogetherCrashGuard.ClanIncomeCompatibility', $true)
+    [ConservationFixture]::CheckIncome($finance.GetMethod('GrossShare', $flags))
+    $finance.GetField('PlayerCount', $flags).SetValue($null, 2)
+    $finance.GetField('HostIncome', $flags).SetValue($null, [single]0)
+    $incomeCall = $finance.GetNestedType('IncomeCall', [Reflection.BindingFlags]'NonPublic')
+    $call = [Activator]::CreateInstance($incomeCall, $true)
+    $incomeCall.GetField('Before', [Reflection.BindingFlags]'Instance, NonPublic').SetValue($call, [single]100)
+    $collected = [TaleWorlds.CampaignSystem.ExplainedNumber]::new([single]1100, $false, $null)
+    # The asset wallet may already be empty here. Split the captured 1000 income,
+    # preserving the incoming 100 balance; do not query a second, now-empty wallet.
+    $incomeArgs = [object[]]@($null, $collected, $false, $call)
+    $finance.GetMethod('IncomePostfix', $flags).Invoke($null, $incomeArgs)
+    if ($incomeArgs[1].ResultNumber -ne 600) { throw 'Collected income was recomputed after withdrawal or shared twice' }
+    if ($finance.GetField('HostIncome', $flags).GetValue($null) -ne 1000) { throw 'Host did not retain the actual gross collection' }
+    $incomeCall.GetField('ClientHandled', [Reflection.BindingFlags]'Instance, NonPublic').SetValue($call, $true)
+    $incomeArgs = [object[]]@($null, [TaleWorlds.CampaignSystem.ExplainedNumber]::new([single]600, $false, $null), $false, $call)
+    $finance.GetMethod('IncomePostfix', $flags).Invoke($null, $incomeArgs)
+    if ($incomeArgs[1].ResultNumber -ne 600) { throw 'Client income was shared twice' }
+    $incomeArgs = [object[]]@($null, [TaleWorlds.CampaignSystem.ExplainedNumber]::new([single]1100, $false, $null), $false, $null)
+    $finance.GetMethod('IncomePostfix', $flags).Invoke($null, $incomeArgs)
+    if ($incomeArgs[1].ResultNumber -ne 1100) { throw 'Unrelated clan finance was modified' }
+    $finance.GetField('PlayerCount', $flags).SetValue($null, 1)
+    'Income regression passed: post-withdrawal collection, no double share, unrelated clan isolation and conserved signed amounts for 2-4 players.'
+    $dailyMethod = [HarmonyLib.AccessTools]::Method([TaleWorlds.CampaignSystem.CampaignBehaviors.ClanVariablesCampaignBehavior], 'DailyTickClan')
+    $dailyInstructions = [HarmonyLib.PatchProcessor]::GetOriginalInstructions($dailyMethod)
+    $dailyRewrite = $finance.GetMethod('RouteDailyPayment', $flags).Invoke($null, [object[]]@(,$dailyInstructions))
+    $dailyCalls = @($dailyRewrite | Where-Object { $_.operand -is [Reflection.MethodInfo] -and $_.operand.Name -eq 'PayDailyGold' })
+    if ($dailyCalls.Count -ne 1) { throw 'Daily gold must be routed once without duplicate payment' }
+    'Native daily finance routing passed: exactly one existing gold transfer is replaced.'
 
     $settings = $fix.GetType('BannerlordTogetherCrashGuard.HostSettingsCompatibility', $true)
     $bindings = $settings.GetField('Bindings', $flags).GetValue($null)

@@ -36,10 +36,7 @@ namespace BannerlordTogetherCrashGuard
 
         internal static void Capture(Dictionary<string, string> state)
         {
-            Type service = AccessTools.TypeByName("ModularSmithing.Crafting.SmithingCraftService");
-            if (service != null)
-                foreach (string flag in new[] { "FreeCrafting", "AllowExperimentalWeapons" })
-                    state["smithflag/" + flag] = AccessTools.Field(service, flag).GetValue(null).ToString();
+            CaptureFlags(state);
             object behavior = HostSettingsCompatibility.StaticProperty("ModularSmithing.Crafting.SmithingPersistenceBehavior", "Current");
             if (behavior == null)
                 return;
@@ -51,6 +48,14 @@ namespace BannerlordTogetherCrashGuard
                 if (value.Length <= 32000)
                     state["smithing/" + id] = value;
             }
+        }
+
+        internal static void CaptureFlags(Dictionary<string, string> state)
+        {
+            Type service = AccessTools.TypeByName("ModularSmithing.Crafting.SmithingCraftService");
+            if (service != null)
+                foreach (string flag in new[] { "FreeCrafting", "AllowExperimentalWeapons" })
+                    state["smithflag/" + flag] = AccessTools.Field(service, flag).GetValue(null).ToString();
         }
 
         internal static void Apply(Dictionary<string, string> state)

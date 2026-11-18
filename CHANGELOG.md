@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.2 — reduce recurring work and correct income calculation
+
+- Removed periodic all-NPC appearance scans and complete crafted-item scans. Editor saves and crafted-item registration publish changes; join/Sync still sends full state.
+- Batched full NPC snapshots across frames and bounded compatibility receive work per frame. Replaced extra periodic full kingdom refreshes with war/peace-triggered or explicit refreshes.
+- Cached gross-income previews between hourly refreshes instead of recalculating all clan income every publish.
+- Moved sharing into the actual native income contribution before expenses. The previous postfix queried income again after wallet withdrawals, so its second result could differ from the amount collected.
+- Clients use the host income snapshot without withdrawing the same asset wallets independently. Exactly one native daily gold-transfer call is routed to the local human recipient in shared-clan client mode.
+- Split common garrison funding debits between participating humans. Personal party expenses and other local costs remain; shared income does not guarantee a positive daily balance.
+- Added signed integer allocation with conserved remainders, daily income/net-transfer logs and rate-limited slow-publish diagnostics.
+
+Validation: clean compilation, core smoke checks, 48 actual optional bindings, post-withdrawal income and no-double-share regressions, unchanged unrelated-clan accounting, signed amount conservation for 2–4 players, and exactly one native daily transfer rewrite. Live frame-time measurements and daily income replay are still pending. The user's reported 3–4-second stalls have not been reproduced locally; this build removes recurring work identified in the current code without claiming all stalls are resolved.
+
 ## v0.3.1 — settings deltas and missing faction geography
 
 - Included a self-contained Windows setup executable with automatic download-zone removal for its installed DLL/manifest and backup/rollback of an existing installation. No manual PowerShell unblocking is required.

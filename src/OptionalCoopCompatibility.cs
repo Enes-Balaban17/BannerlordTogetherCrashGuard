@@ -27,6 +27,8 @@ namespace BannerlordTogetherCrashGuard
             Hook(harmony, "ModularSmithing.Crafting.SmithingPersistenceBehavior", "Register", null, nameof(SmithingRegistered));
             Hook(harmony, "BannerlordTogether.PlayerTradeBehavior", "BeginSaveResync", null, nameof(SaveResyncStarted));
             Hook(harmony, "BannerlordTogether.CoopCampaignBehavior", "PrepareGameplayPeerForIsolatedResync", null, nameof(PeerResyncPrepared));
+            Hook(harmony, "TaleWorlds.CampaignSystem.Actions.DeclareWarAction", "ApplyInternal", null, nameof(KingdomChanged));
+            Hook(harmony, "TaleWorlds.CampaignSystem.Actions.MakePeaceAction", "Apply", null, nameof(KingdomChanged));
             Hook(harmony, "Diplomacy.CampaignBehaviors.CivilWarBehavior", "DailyTick", nameof(AuthorityPrefix), null);
             Hook(harmony, "Diplomacy.CampaignBehaviors.CivilWarBehavior", "DailyTickClan", nameof(AuthorityPrefix), null);
             Hook(harmony, "Diplomacy.CampaignBehaviors.DiplomaticAgreementBehavior", "UpdateDiplomaticAgreements", nameof(AuthorityPrefix), null);
@@ -179,6 +181,11 @@ namespace BannerlordTogetherCrashGuard
         {
             if (__result)
                 CoopCompatibilityBehavior.Instance?.RequestFullSync(peerId);
+        }
+
+        private static void KingdomChanged()
+        {
+            CoopCompatibilityBehavior.Instance?.MarkKingdomChanged();
         }
     }
 }

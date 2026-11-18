@@ -34,6 +34,7 @@ namespace BannerlordTogetherCrashGuard
         private static readonly HashSet<string> FailedHeroes = new HashSet<string>();
         private static readonly Dictionary<GhostPartyController, Tuple<PlayerHeroDataPacket, bool>> GhostData =
             new Dictionary<GhostPartyController, Tuple<PlayerHeroDataPacket, bool>>();
+        private static readonly Dictionary<int, Queue<Hero>> FullStates = new Dictionary<int, Queue<Hero>>();
 
         internal static void Reset()
         {
@@ -41,6 +42,7 @@ namespace BannerlordTogetherCrashGuard
             _localAppearance = null;
             FailedHeroes.Clear();
             GhostData.Clear();
+            FullStates.Clear();
         }
 
         internal static void ObserveLocalHero()
@@ -107,15 +109,39 @@ namespace BannerlordTogetherCrashGuard
 
         internal static void SendFullState(int peer)
         {
-            var state = new Dictionary<string, string>();
-            foreach (Hero hero in Hero.AllAliveHeroes)
-                if (Eligible(hero))
+            FullStates[peer] = new Queue<Hero>(Hero.AllAliveHeroes.Where(Eligible));
+        }
+
+        internal static void TickFullStates()
+        {
+            if (!CoopSession.IsHost || FullStates.Count == 0)
+                return;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            foreach (int peer in FullStates.Keys.ToArray())
+            {
+                if (CoopSession.Server?.GameplayPeerIds.Contains(peer) != true)
                 {
+                    FullStates.Remove(peer);
+                    continue;
+                }
+                var state = new Dictionary<string, string>();
+                Queue<Hero> queue = FullStates[peer];
+                while (queue.Count > 0 && state.Count < 4 && clock.ElapsedMilliseconds < 2)
+                {
+                    Hero hero = queue.Dequeue();
+                    if (!Eligible(hero))
+                        continue;
                     string value = TrySerialize(hero);
                     if (value != null)
                         state["hero/" + hero.StringId] = value;
                 }
-            CoopCompatibilityBehavior.Instance.SendState(peer, state);
+                if (state.Count > 0)
+                    CoopCompatibilityBehavior.Instance.SendState(peer, state);
+                if (queue.Count == 0)
+                    FullStates.Remove(peer);
+                if (clock.ElapsedMilliseconds >= 2)
+                    break;
+            }
         }
 
         private static string TrySerialize(Hero hero)
