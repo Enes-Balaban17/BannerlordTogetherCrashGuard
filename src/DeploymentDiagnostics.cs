@@ -18,7 +18,7 @@ namespace BannerlordTogetherCrashGuard
 
         internal static bool IsTrackedQuestMission(Mission mission, out MapEvent mapEvent)
         {
-            return Missions.TryGetValue(mission, out mapEvent) && mission.SceneLevels == "land_raid";
+            return Missions.TryGetValue(mission, out mapEvent);
         }
 
         [HarmonyPatch(typeof(SandBoxMissions), nameof(SandBoxMissions.OpenBattleMission),
@@ -29,11 +29,12 @@ namespace BannerlordTogetherCrashGuard
             {
                 __state = null;
                 MapEvent mapEvent = MapEvent.PlayerMapEvent ?? PlayerEncounter.Battle;
-                if (!RaidUpdatePatch.IsQuestRaid(mapEvent))
+                if (mapEvent == null || (!RaidUpdatePatch.IsQuestRaid(mapEvent) &&
+                    mapEvent.MapEventSettlement?.IsVillage != true && rec.SceneLevels != "land_raid"))
                     return;
 
                 __state = mapEvent;
-                BattleLog.Write($"Opening quest battle levels='{rec.SceneLevels}' host={CoopSession.IsHost} " +
+                BattleLog.Write($"Opening village battle levels='{rec.SceneLevels}' host={CoopSession.IsHost} " +
                     $"client={CoopSession.IsClient} synchronizedBattle={CoopSession.InSpNativeBattle} " +
                     BattleLog.Event(mapEvent));
             }

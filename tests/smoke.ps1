@@ -11,6 +11,10 @@ $fix = [Reflection.Assembly]::LoadFrom($FixDll)
 $owner = 'bannerlord.together.crashguard.smoke'
 $harmony = [HarmonyLib.Harmony]::new($owner)
 $expected = @(
+    'BannerlordTogether.Network.CoopNetworkBase.EnqueueReceivedPacket'
+    'BannerlordTogether.Network.CoopNetworkBase.TryDequeueEnvelope'
+    'TaleWorlds.CampaignSystem.Campaign.set_SpeedUpMultiplier'
+    'TaleWorlds.CampaignSystem.MapEvents.MapEvent.SimulateBattleSessionForMapEvent'
     'TaleWorlds.CampaignSystem.MapEvents.MapEvent.Update'
     'TaleWorlds.CampaignSystem.MapEvents.MapEvent.FinalizeEventAux'
     'SandBox.SandBoxMissions.OpenBattleMission'

@@ -4,7 +4,8 @@ param(
     [string]$HarmonyBin,
     [string]$TogetherBin,
     [string]$XorberaxBin,
-    [switch]$SmokeTest
+    [switch]$SmokeTest,
+    [switch]$CompatibilityTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,6 +32,11 @@ if ($SmokeTest) {
     if ($LASTEXITCODE -ne 0) { throw "Harmony smoke test failed with exit code $LASTEXITCODE" }
 }
 
+if ($CompatibilityTest) {
+    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'tests\compatibility.ps1') $GameDir $dll
+    if ($LASTEXITCODE -ne 0) { throw "Optional compatibility tests failed with exit code $LASTEXITCODE" }
+}
+
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $dist = Join-Path $PSScriptRoot 'dist'
@@ -48,6 +54,7 @@ try {
             "$module/SubModule.xml" = $manifest
             "$module/bin/Win64_Shipping_Client/BannerlordTogetherCrashGuard.dll" = $dll
             'README.md' = Join-Path $PSScriptRoot 'README.md'
+            'CHANGELOG.md' = Join-Path $PSScriptRoot 'CHANGELOG.md'
             'INVESTIGATION.md' = Join-Path $PSScriptRoot 'INVESTIGATION.md'
             'WorkshopCreate.xml' = Join-Path $PSScriptRoot 'WorkshopCreate.xml'
             'WORKSHOP.md' = Join-Path $PSScriptRoot 'WORKSHOP.md'

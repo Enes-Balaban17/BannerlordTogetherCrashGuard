@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>BannerlordTogetherCrashGuard-Setup</AssemblyName>
+    <Product>Bannerlord Together Crash Guard Setup</Product>
+    <Version>$(ModVersion)</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Windows.Forms" />
+    <EmbeddedResource Include="$(PayloadDir)\SubModule.xml" LogicalName="SubModule.xml" />
+    <EmbeddedResource Include="$(PayloadDir)\BannerlordTogetherCrashGuard.dll" LogicalName="BannerlordTogetherCrashGuard.dll" />
+  </ItemGroup>
+</Project>

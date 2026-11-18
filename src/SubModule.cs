@@ -6,6 +6,8 @@ using BannerlordTogether;
 using HarmonyLib;
 using SandBox;
 using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 
 namespace BannerlordTogetherCrashGuard
@@ -58,11 +60,26 @@ namespace BannerlordTogetherCrashGuard
             try
             {
                 ShoulderCameraCompatibility.Apply(_harmony);
+                OptionalCoopCompatibility.Apply(_harmony);
             }
             catch (Exception exception) when (DeploymentCrashGuard.CanSuppress(exception))
             {
                 BattleLog.Write($"[SHOULDER-CAMERA] Optional hook unavailable: {exception.Message}");
             }
+        }
+
+        protected override void OnGameStart(Game game, IGameStarter gameStarter)
+        {
+            base.OnGameStart(game, gameStarter);
+            if (_harmony != null && game.GameType is Campaign && gameStarter is CampaignGameStarter campaignStarter)
+                campaignStarter.AddBehavior(new CoopCompatibilityBehavior());
+        }
+
+        protected override void OnApplicationTick(float dt)
+        {
+            base.OnApplicationTick(dt);
+            if (_harmony != null)
+                CoopCompatibilityBehavior.Instance?.Tick(dt);
         }
 
         private static void CheckBuild(Assembly assembly, string expected)

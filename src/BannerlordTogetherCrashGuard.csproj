@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <Version>0.2.4</Version>
+    <Version>0.3.1</Version>
     <AssemblyTitle>Bannerlord Together Crash Guard</AssemblyTitle>
     <Product>Bannerlord Together Crash Guard</Product>
     <PlatformTarget>x64</PlatformTarget>
@@ -12,6 +12,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <Reference Include="netstandard" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="0Harmony" HintPath="$(HarmonyBin)\0Harmony.dll" Private="false" />
     <Reference Include="BannerlordTogether" HintPath="$(TogetherBin)\BannerlordTogether.dll" Private="false" />
     <Reference Include="SandBox" HintPath="$(SandboxBin)\SandBox.dll" Private="false" />
@@ -20,6 +22,7 @@
     <Reference Include="TaleWorlds.Engine" HintPath="$(GameBin)\TaleWorlds.Engine.dll" Private="false" />
     <Reference Include="TaleWorlds.DotNet" HintPath="$(GameBin)\TaleWorlds.DotNet.dll" Private="false" />
     <Reference Include="TaleWorlds.Core" HintPath="$(GameBin)\TaleWorlds.Core.dll" Private="false" />
+    <Reference Include="TaleWorlds.Localization" HintPath="$(GameBin)\TaleWorlds.Localization.dll" Private="false" />
     <Reference Include="TaleWorlds.CampaignSystem" HintPath="$(GameBin)\TaleWorlds.CampaignSystem.dll" Private="false" />
     <Reference Include="TaleWorlds.MountAndBlade" HintPath="$(GameBin)\TaleWorlds.MountAndBlade.dll" Private="false" />
   </ItemGroup>
