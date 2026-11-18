@@ -62,6 +62,7 @@ namespace BannerlordTogetherCrashGuard
             GhostEncyclopediaCompatibility.ImportLegacyLogEvidence();
             GhostEncyclopediaCompatibility.RestoreHiddenEntries();
             HostSettingsCompatibility.InstallChangeHooks(new Harmony(SubModule.Owner));
+            OptionalCoopCompatibility.ApplyCampaign(new Harmony(SubModule.Owner));
         }
 
         public override void SyncData(IDataStore dataStore)

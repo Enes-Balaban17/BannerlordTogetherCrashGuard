@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.1 — fix campaign-load crash from early finance patch installation
+
+- Fixed the startup order regression reported in CrashDoctor `0d918b6a`. The first exception explicitly identifies `ClanIncomeCompatibility.Install` initializing `DefaultClanFinanceModel` before a game exists. That native initializer reads `Game.Current.GameTextManager`; once it throws, the CLR retains its failed state and the map's first finance query crashes even after a game is created.
+- Removed finance installation from the initial-menu hook phase. Finance adapters now install through campaign session/initialization events, with both game-type and text-manager readiness checks. A defensive check in the installer itself also prevents direct early calls. Other v0.5.0 features remain included.
+- Added a separate-process startup lifecycle regression against the actual game binary: no finance hooks without `Game.Current` or its text manager, successful native static initialization with a managed text fixture, late finance binding and repeat-event idempotency. The reported failing initialization boundary is explicitly replayed in a separate process to demonstrate that later creating the game cannot repair a poisoned type.
+- Updated the full compatibility test to distinguish initial-menu and campaign hook phases. Startup checks are now part of `build.ps1 -CompatibilityTest`.
+
+Release build, startup lifecycle, core/optional integration and installer checks pass. Tests use managed fixtures and do not launch Bannerlord or claim to replay the entire campaign save. Restart the game after installing; a type already poisoned in an old process cannot be repaired by replacing the DLL on disk.
+
 ## v0.5.0 — personal banking, independent clan armies and death replay protection
 
 - Added host-owned bank ledgers keyed by authenticated co-op character identity. Clients no longer treat the host's copied native bank dictionary as their own account or independently accrue interest. Deposits/withdrawals validate funds, account state, integer capacity and proximity to an accessible bank on the host. Empty accounts earn zero interest.

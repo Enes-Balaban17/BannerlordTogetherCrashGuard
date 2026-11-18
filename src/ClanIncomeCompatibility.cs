@@ -47,6 +47,11 @@ namespace BannerlordTogetherCrashGuard
 
         internal static void Install(Harmony harmony)
         {
+            // Harmony may run the target's type initializer when preparing an instance
+            // patch. Native finance text fields dereference Game.Current at that point.
+            // A failed .cctor permanently poisons this type for the current AppDomain.
+            if (TaleWorlds.Core.Game.Current?.GameTextManager == null)
+                return;
             Type existing = AccessTools.TypeByName("BannerlordTogether.Patches.CoopFinancePatches");
             var originalPostfix = existing == null ? null : AccessTools.Method(existing, "Postfix");
             if (originalPostfix != null && Harmony.GetPatchInfo(originalPostfix)?.Owners.Contains(SubModule.Owner) != true)

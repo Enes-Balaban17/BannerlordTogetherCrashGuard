@@ -33,6 +33,8 @@ if ($SmokeTest) {
 }
 
 if ($CompatibilityTest) {
+    powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'tests\startup.ps1') $GameDir $dll
+    if ($LASTEXITCODE -ne 0) { throw "Startup lifecycle tests failed with exit code $LASTEXITCODE" }
     powershell.exe -NoProfile -File (Join-Path $PSScriptRoot 'tests\compatibility.ps1') $GameDir $dll
     if ($LASTEXITCODE -ne 0) { throw "Optional compatibility tests failed with exit code $LASTEXITCODE" }
 }

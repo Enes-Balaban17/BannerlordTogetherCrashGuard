@@ -80,6 +80,13 @@ namespace BannerlordTogetherCrashGuard
             }
         }
 
+        public override void OnGameInitializationFinished(Game game)
+        {
+            base.OnGameInitializationFinished(game);
+            if (_harmony != null && ReferenceEquals(game, Game.Current))
+                OptionalCoopCompatibility.ApplyCampaign(_harmony);
+        }
+
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);

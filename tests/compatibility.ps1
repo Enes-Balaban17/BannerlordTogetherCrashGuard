@@ -68,6 +68,19 @@ try {
     'Reproduced native NullReferenceException at the missing-geography boundary before installing the guard.'
     $optional = $fix.GetType('BannerlordTogetherCrashGuard.OptionalCoopCompatibility', $true)
     $optional.GetMethod('Apply', $flags).Invoke($null, @($harmony))
+    $earlyFinance = @($harmony.GetPatchedMethods() | Where-Object { $_.DeclaringType -eq [TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel] })
+    if ($earlyFinance.Count -ne 0) { throw 'Finance hooks were installed before the campaign game context' }
+    $currentGameField = [HarmonyLib.AccessTools]::Field([TaleWorlds.Core.Game], '_current')
+    $previousGame = $currentGameField.GetValue($null)
+    try {
+        $campaignGame = [Runtime.Serialization.FormatterServices]::GetUninitializedObject([TaleWorlds.Core.Game])
+        $campaignType = [Runtime.Serialization.FormatterServices]::GetUninitializedObject([TaleWorlds.CampaignSystem.Campaign])
+        [HarmonyLib.AccessTools]::Property([TaleWorlds.Core.Game], 'GameType').SetValue($campaignGame, $campaignType)
+        [HarmonyLib.AccessTools]::Property([TaleWorlds.Core.Game], 'GameTextManager').SetValue($campaignGame, [TaleWorlds.Core.GameTextManager]::new())
+        $currentGameField.SetValue($null, $campaignGame)
+        $optional.GetMethod('ApplyCampaign', $flags).Invoke($null, @($harmony))
+        [Runtime.CompilerServices.RuntimeHelpers]::RunClassConstructor([TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel].TypeHandle)
+    } finally { $currentGameField.SetValue($null, $previousGame) }
     $required = @(
         'XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior.Withdraw',
         'XorberaxLegacy.Logic.BanksofCalradiaCampaignBehavior.UpdateBankData',

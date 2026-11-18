@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
     <AssemblyTitle>Bannerlord Together Crash Guard</AssemblyTitle>
     <Product>Bannerlord Together Crash Guard</Product>
     <PlatformTarget>x64</PlatformTarget>

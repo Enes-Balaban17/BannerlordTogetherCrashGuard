@@ -43,7 +43,6 @@ namespace BannerlordTogetherCrashGuard
             Install("Diplomacy messengers", () => MessengerCompatibility.Install(harmony));
             Install("Diplomacy fief valuation", () => DiplomacySettlementCompatibility.Install(harmony));
             Install("Encyclopedia", () => GhostEncyclopediaCompatibility.Install(harmony));
-            Install("Clan income", () => ClanIncomeCompatibility.Install(harmony));
             Install("Settings change events", () => HostSettingsCompatibility.InstallChangeHooks(harmony));
             Install("Clan lifecycle", () => ClanLifecycleCompatibility.Install(harmony));
             Install("Dismemberment", () => DismembermentCompatibility.Install(harmony));
@@ -52,6 +51,13 @@ namespace BannerlordTogetherCrashGuard
             Install("Battle death replay", () => BattleDeathCompatibility.Install(harmony));
             Install("Clan and co-op armies", () => ClanArmyCompatibility.Install(harmony));
             Hook(harmony, "TogetherLordsCore.PeerSync.PacketDispatchPostfix", "Postfix", nameof(IgnoreOurExtensionInLordsPrefix), null);
+        }
+
+        internal static void ApplyCampaign(Harmony harmony)
+        {
+            if (!(TaleWorlds.Core.Game.Current?.GameType is Campaign) || TaleWorlds.Core.Game.Current.GameTextManager == null)
+                return;
+            Install("Clan income", () => ClanIncomeCompatibility.Install(harmony));
         }
 
         private static void Install(string feature, Action apply)
